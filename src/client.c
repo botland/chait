@@ -29,7 +29,7 @@ void build_assistant_tool_call(cJSON *messages, ToolResponseParams *params) {
 
     cJSON *function = cJSON_CreateObject();
     cJSON_AddStringToObject(function, "name", params->tool_name);
-    cJSON_AddStringToObject(function, "arguments", params->tool_arguments);
+    cJSON_AddStringToObject(function, "arguments", params->tool_arguments ? params->tool_arguments : "{}");
     cJSON_AddItemToObject(tool_call, "function", function);
 
     cJSON_AddItemToArray(tool_calls, tool_call);
@@ -92,8 +92,9 @@ int ask_inference_engine(char *user_input, ToolResponseParams *trp) {
         build_assistant_tool_call(messages, trp);
         build_tool_response(messages, trp);
     }
-    cJSON_AddItemToObject(root, "messages", messages);
+    clear_last_tool_response_params();
 
+    cJSON_AddItemToObject(root, "messages", messages);
     cJSON_AddNumberToObject(root, "temperature", 0.1);
     cJSON_AddNumberToObject(root, "max_tokens", 8192);
     cJSON_AddStringToObject(root, "model", "lexi8b");
@@ -199,8 +200,10 @@ void process_events(StreamState *state) {
         case EVENT_TOOL_CALL:
             {
                 ToolCall tc = {
-                    .function_name = ev.tool.name,
-                    .function_arguments = ev.tool.arguments
+                   .id = ev.tool.id,
+                   .type = NULL,
+                   .function_name = ev.tool.name,
+                   .function_arguments = ev.tool.arguments
                 };
                 execute_tool(state, &tc);
                 free_event(&ev);
@@ -228,6 +231,22 @@ static ToolResponseParams last_trp_static = {0};
 
 ToolResponseParams* get_last_tool_response_params(void) {
     return &last_trp_static;
+}
+
+void set_last_tool_response_params(const char *tool_call_id, const char *tool_name, const char *content) {
+    if (last_trp_static.tool_call_id) free(last_trp_static.tool_call_id);
+    if (last_trp_static.tool_name) free(last_trp_static.tool_name);
+    if (last_trp_static.content) free(last_trp_static.content);
+    last_trp_static.tool_call_id = tool_call_id ? strdup(tool_call_id) : NULL;
+    last_trp_static.tool_name = tool_name ? strdup(tool_name) : NULL;
+    last_trp_static.content = content ? strdup(content) : NULL;
+}
+
+void clear_last_tool_response_params(void) {
+    if (last_trp_static.tool_call_id) free(last_trp_static.tool_call_id);
+    if (last_trp_static.tool_name) free(last_trp_static.tool_name);
+    if (last_trp_static.content) free(last_trp_static.content);
+    memset(&last_trp_static, 0, sizeof(last_trp_static));
 }
 
 bool last_response_has_tool_calls(void) {

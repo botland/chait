@@ -3,11 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-// === Missing helpers (moved back from old tool_calls) ===
-void send_tool_response(StreamState *state, const char *status, const char *content) {
-    // your original implementation here (or the one from old tool_calls.c)
-    // for now a minimal version:
+void send_tool_response(StreamState *state, const ToolCall *tool, const char *status, const char *content) {
     printf("[TOOL RESPONSE] %s: %s\n", status, content ? content : "");
+    if (tool) {
+        set_last_tool_response_params(tool->id, tool->function_name, content);
+    }
     // TODO: call build_tool_response if you want full history
 }
 
@@ -42,7 +42,7 @@ void free_tool_response_params(ToolResponseParams *p) {
 // === Registry execute_tool ===
 void execute_tool(StreamState *state, const ToolCall *tool) {
     if (!tool || !tool->function_name) {
-        send_tool_response(state, "error", "Invalid tool call");
+        send_tool_response(state, tool, "error", "Invalid tool call");
         return;
     }
 
@@ -56,6 +56,6 @@ void execute_tool(StreamState *state, const ToolCall *tool) {
     } else {
         char error_msg[512];
         snprintf(error_msg, sizeof(error_msg), "Unknown tool: %s", tool->function_name);
-        send_tool_response(state, "error", error_msg);
+        send_tool_response(state, tool, "error", error_msg);
     }
 }
