@@ -239,26 +239,6 @@ static void handle_raw_input_loop() {
         continue;  // Skip accumulation
     }
 
-// Handle escape sequence state transitions
-/*if (in_escape) {
-    if (!in_ansi_seq && (c == '[' || c == 'O')) {
-        in_ansi_seq = true;
-    } else if (in_ansi_seq && (c >= '@' && c <= '~')) {  // 0x40-0x7E covers letters, ~, etc.
-        in_escape = false;
-        in_ansi_seq = false;
-    } else if (!in_ansi_seq && (c >= '@' && c <= '~')) {
-        in_escape = false;
-        in_ansi_seq = false;
-    }
-    // In escape: forward byte but skip further processing that accumulates
-    write(master_fd, &c, 1);
-    continue;  // Skip accumulation and other checks
-} else if (c == '\x1b') {  // ESC (27)
-    in_escape = true;
-    write(master_fd, &c, 1);
-    continue;  // Skip accumulation
-}*/
-
                 if (c == '\n' || c == '\r') {
                     line[line_len] = '\0';
 
@@ -274,9 +254,14 @@ static void handle_raw_input_loop() {
                                 write(master_fd, "\b \b", 3);
                             }
 
-                            printf("\n\r");
-//write(master_fd, "\n", 1); write(master_fd, "\r", 1);
+                            write(master_fd, "\n\r", 2);  // v2: raw write to master_fd (no more stdout printf mix that caused garbling)
+
                             if (!is_command_local(line)) {
+                                // v2 fix: force winsize sync right before agent/tool output to fix leading spaces, alignment, and messed-up multi-line tool responses
+                                struct winsize ws;
+                                if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0) {
+                                    ioctl(master_fd, TIOCSWINSZ, &ws);
+                                }
                                 handle_llm_prompt(line);
                             }
 
