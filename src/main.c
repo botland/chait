@@ -10,6 +10,8 @@
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
 
 int master_fd = -1;
 
@@ -154,6 +156,44 @@ bool in_escape = false;
 bool in_csi = false;
 bool in_ansi_seq = false;
 // ────────────────────────────────────────────────
+// CWD synchronization: keep parent process cwd in sync with bash child
+// so that tools (list_files, grep, save_to_file, etc.) see the same directory
+// as your shell. Fixes the main drawback you pointed out.
+// ────────────────────────────────────────────────
+static void sync_cwd_from_line(const char *line) {
+    if (!line || line[0] == '\0') return;
+
+    char cmd[4096];
+    strncpy(cmd, line, sizeof(cmd) - 1);
+    cmd[sizeof(cmd) - 1] = '\0';
+
+    // trim trailing whitespace
+    size_t len = strlen(cmd);
+    while (len > 0 && (cmd[len - 1] == ' ' || cmd[len - 1] == '\t' || cmd[len - 1] == '\n' || cmd[len - 1] == '\r')) {
+        cmd[--len] = '\0';
+    }
+
+    if (strncmp(cmd, "cd", 2) == 0 && (cmd[2] == '\0' || cmd[2] == ' ')) {
+        const char *arg = cmd + 2;
+        while (*arg == ' ' || *arg == '\t') arg++;
+        if (*arg == '\0' || strcmp(arg, "~") == 0) {
+            const char *home = getenv("HOME");
+            chdir(home ? home : "/");
+        } else if (strcmp(arg, "-") == 0) {
+            // cd - uses OLDPWD; bash handles it, parent skips for simplicity
+        } else {
+            chdir(arg);  // ignore errors (bash will report them)
+        }
+    } else if (strncmp(cmd, "pushd", 5) == 0) {
+        const char *arg = cmd + 5;
+        while (*arg == ' ' || *arg == '\t') arg++;
+        if (*arg != '\0' && *arg != '+' && *arg != '-') {
+            chdir(arg);
+        }
+    }
+    // popd intentionally skipped (would require maintaining a dir stack)
+}
+// ────────────────────────────────────────────────
 // PTY raw input loop (extracted for clarity)
 // ────────────────────────────────────────────────
 static void handle_raw_input_loop() {
@@ -223,6 +263,8 @@ static void handle_raw_input_loop() {
                     line[line_len] = '\0';
 
                     if (line_len > 0) {
+                        sync_cwd_from_line(line);
+
                         if (is_command(line)) {
                             write(master_fd, &c, 1);
                         } else {
@@ -271,6 +313,7 @@ static void handle_raw_input_loop() {
             ssize_t n = read(master_fd, buf, sizeof(buf));
             if (n > 0) {
                 write(STDOUT_FILENO, buf, n);
+                fflush(stdout);
             } else {
                 perror("read pty");
                 break;
@@ -325,14 +368,14 @@ int main(void) {
         if (slave_fd < 0) { perror("open slave"); _exit(1); }
 
         ioctl(slave_fd, TIOCSWINSZ, &ws);
-        ioctl(master_fd, TIOCSWINSZ, &ws);
+        setenv("TERM", "xterm-256color", 1);
 
         dup2(slave_fd, 0);
         dup2(slave_fd, 1);
         dup2(slave_fd, 2);
         if (slave_fd > 2) close(slave_fd);
 
-        setenv("PS1", "\\[\\e[1;34m\\]PTY-SHELL \\w \\$ \\[\\e[0m\\] ", 1);
+        setenv("PS1", "\[\e[1;34m\]PTY-SHELL \w \$ \[\e[0m\] ", 1);
         execlp("/bin/bash", "bash", "--norc", (char *)NULL);
 
         perror("execlp bash"); _exit(127);
