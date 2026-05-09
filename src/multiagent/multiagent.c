@@ -5,12 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Minimal AgentMessage definition to enable real queue usage (matches queue.c expectations)
-typedef struct {
-    char target[64];
-    char sender[64];
-    char content[8192];
-} AgentMessage;
+// AgentMessage typedef moved to message_queue.h (shared, no duplicate)
 
 void* agent_thread(void* arg) {
     DynamicAgent* agent = (DynamicAgent*)arg;
