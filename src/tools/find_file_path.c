@@ -111,9 +111,11 @@ void execute_find_file_path(StreamState *state, const ToolCall *tool) {
 
     cJSON_Delete(args_root);
 
-    ToolResponseParams *trp = create_tool_response_params(tool, content);
-    ask_inference_engine(state->input, trp);
-    free_tool_response_params(trp);
+    if (!count) {
+        send_tool_response(state, tool, "error", "No matching files found.");
+    } else {
+        send_tool_response(state, tool, "success", content);
+    }
     free(content); 
 }
 
