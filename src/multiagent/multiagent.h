@@ -1,34 +1,26 @@
-#pragma once
+#ifndef MULTIAGENT_H
+#define MULTIAGENT_H
 
-#include "../agent_context.h"
 #include <pthread.h>
-#include <stdbool.h>
+#include "../agent_context.h"
+#include "message_queue.h"
 
-// Multi-agent role definitions
-typedef enum {
-    ROLE_ARCHITECT = 0,
-    ROLE_CODER,
-    ROLE_TESTER,
-    ROLE_DEBUGGER,
-    ROLE_ORCHESTRATOR
-} AgentRole;
+#define MAX_AGENTS 16
 
-// Per-agent instance
 typedef struct {
-    AgentRole role;
+    char name[64];
+    char system_prompt[8192];
+    pthread_t thread_id;
     AgentContext ctx;
-    pthread_t thread;
-    int role_id;
-} AgentInstance;
+    int id;
+} DynamicAgent;
 
-// Message for inter-agent communication
-typedef struct {
-    AgentRole from_role;
-    AgentRole to_role;
-    char payload[1024];
-    char result[4096];
-    bool is_handled;
-} AgentMessage;
+// Global orchestrator state (protected by mutex)
+extern DynamicAgent agents[MAX_AGENTS];
+extern int agent_count;
 
-int run_multiagent_orchestrator(const char *initial_input, int max_agents);
-void init_multiagent_system(void);
+int spawn_dynamic_agent(const char* name, const char* system_prompt);
+void send_to_agent(const char* target_name, const char* message);
+int run_multiagent_orchestrator(const char* initial_input);
+
+#endif
