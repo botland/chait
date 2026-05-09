@@ -14,8 +14,10 @@ typedef struct {
     AgentMessage messages[MAX_QUEUE_SIZE];
     int head;
     int tail;
+    int count;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
+    pthread_cond_t not_empty, not_full;
 } MessageQueue;
 
 void mq_init(MessageQueue *mq);

@@ -4,7 +4,6 @@
 #include <pthread.h>
 #include "../client.h"
 #include "message_queue.h"
-#include "../command.h"  // for Options* (fixes unknown type in .c)
 
 #define MAX_AGENTS 16
 
@@ -22,6 +21,6 @@ extern int agent_count;
 
 DynamicAgent* spawn_dynamic_agent(const char* name, const char* system_prompt);
 void send_to_agent(const char* target_name, const char* message);
-int run_multiagent_orchestrator(Options* opts);
+int run_multiagent_orchestrator(void *opts);
 
 #endif

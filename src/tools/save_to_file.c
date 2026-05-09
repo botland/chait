@@ -81,9 +81,7 @@ void execute_save_to_file(StreamState *state, const ToolCall *tool) {
             char *success_msg = NULL;
             asprintf(&success_msg, "File successfully saved/overwritten at %s", file_path);
 
-            ToolResponseParams *trp = create_tool_response_params(tool, success_msg);  
-            ask_inference_engine(state->input, trp);  
-            free_tool_response_params(trp);
+            send_tool_response(state, tool, "success", success_msg);
             free(success_msg);
         } else {
             fprintf(stderr, "Partial write to %s (%zu/%zu bytes)\n", 

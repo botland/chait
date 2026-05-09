@@ -1,5 +1,4 @@
 #include "multiagent.h"
-#include "../command.h"
 
 // Leader thread logic (stub)
 // This would parse user input, delegate to role agents via queue,

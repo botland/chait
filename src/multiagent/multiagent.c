@@ -76,7 +76,7 @@ char* llm_route_or_spawn(const char* user_prompt) {
     }
 }
 
-int run_multiagent_orchestrator(Options* opts) {
+int run_multiagent_orchestrator(void *opts) {
     (void)opts;  // unused for now
 
     init_message_queue();  // real queue init

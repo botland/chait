@@ -5,13 +5,6 @@
 
 #define QUEUE_SIZE 64
 
-typedef struct {
-    AgentMessage messages[QUEUE_SIZE];
-    int head, tail, count;
-    pthread_mutex_t mutex;
-    pthread_cond_t not_empty, not_full;
-} MessageQueue;
-
 static MessageQueue queue;
 
 void init_message_queue() {
