@@ -38,4 +38,10 @@ void register_all_tools(void) {
 
     extern ToolHandler find_file_path_handler;
     register_tool(find_file_path_handler);
+
+    extern ToolHandler save_to_file_handler;
+    register_tool(save_to_file_handler);
+
+    extern ToolHandler spawn_agent_handler;
+    register_tool(spawn_agent_handler);
 }
