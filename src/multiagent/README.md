@@ -3,20 +3,25 @@
 ## Philosophy
 - **No hardcoded roles** (no architect/coder/tester/debugger enums)
 - User spawns any number of agents at runtime with fully custom system prompts
-- Each agent runs in its own pthread with isolated AgentContext + ReAct loop
+- **New evolution**: The LLM orchestrator can *automatically request* to spawn a new agent if none of the existing ones fit the task.
 
 ## CLI Commands (inside chait when --multiagent enabled)
 
-spawn-agent --name architect --prompt "You are a senior software architect. Always output Mermaid diagrams first."
-spawn-agent --name tester --prompt "You are a ruthless tester. Write tests, run them via PTY, fail fast."
+spawn-agent --name architect --prompt "You are a senior software architect..."
 
 @architect design the web search feature
-@tester verify the patch
+
+## LLM-Auto-Spawn (new feature)
+Orchestrator LLM sees all agents + their prompts.
+If no match: it replies `SPAWN:newname:full custom prompt`
+→ automatically spawns + routes.
 
 ## Status
-- spawn_dynamic_agent() implemented and thread-ready
-- send_to_agent() stub with message queue integration path
-- Orchestrator ready for PTY input parsing
-- 100% backward compatible with single-agent multiloop
+- spawn_dynamic_agent() implemented
+- `llm_route_or_spawn()` added — LLM decides route OR auto-spawn
+- send_to_agent() stub ready
+- 100% backward compatible
 
-Next step: wire `spawn-agent` parser into main PTY loop + pthreads in Makefile.
+Next: wire parser + pthreads + full inference call.
+
+**Pushed live.**
