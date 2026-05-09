@@ -2,7 +2,7 @@
 #define MULTIAGENT_H
 
 #include <pthread.h>
-#include "../agent_context.h"
+#include "../client.h"
 #include "message_queue.h"
 
 #define MAX_AGENTS 16
