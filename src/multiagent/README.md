@@ -1,22 +1,22 @@
-# Multi-Agent Exploration Branch
+# Dynamic Multi-Agent Mode (multiagent branch)
 
-## Overview
-This branch explores true multi-agent mode for chait:
-- 4 specialized agents (Architect, Coder, Tester, Debugger)
-- Each runs its own `AgentContext` in a pthread
-- Inter-agent communication via lock-protected message queue
-- Orchestrator coordinates hand-offs
-- Backward compatible with single-agent multiloop
+## Philosophy
+- **No hardcoded roles** (no architect/coder/tester/debugger enums)
+- User spawns any number of agents at runtime with fully custom system prompts
+- Each agent runs in its own pthread with isolated AgentContext + ReAct loop
 
-## Architecture
-- Single-threaded core preserved
-- Optional `--multiagent` flag spawns role threads
-- MessageQueue uses pthread_mutex + cond for safe IPC
-- No shared globals except the queue (tiny critical section)
+## CLI Commands (inside chait when --multiagent enabled)
 
-## Next steps
-- Wire role-specific tool subsets
-- Add hand-off logic in orchestrator
-- Test end-to-end refactor scenario
+spawn-agent --name architect --prompt "You are a senior software architect. Always output Mermaid diagrams first."
+spawn-agent --name tester --prompt "You are a ruthless tester. Write tests, run them via PTY, fail fast."
 
-Branch created from multiloop at fb474bda443ae368e2ea6b4c259154e43515de66
+@architect design the web search feature
+@tester verify the patch
+
+## Status
+- spawn_dynamic_agent() implemented and thread-ready
+- send_to_agent() stub with message queue integration path
+- Orchestrator ready for PTY input parsing
+- 100% backward compatible with single-agent multiloop
+
+Next step: wire `spawn-agent` parser into main PTY loop + pthreads in Makefile.
