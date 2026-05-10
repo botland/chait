@@ -72,8 +72,8 @@ static void parse_supervisor_reply(const char* reply, SupervisorDecision* dec) {
     if (strlen(dec->decision) == 0) strcpy(dec->decision, "direct_response");
 }
 
-/* Real bridge for LLM call (added to make supervisor_decide compile and run immediately - uses existing multiagent patterns, no placeholders) */
-char* ask_inference_engine(const char* full_prompt) {
+/* Real bridge for LLM call (renamed to avoid conflict with client.h declaration - existing code untouched) */
+char* supervisor_llm_reply(const char* full_prompt) {
     // Real: lightweight bridge to existing LLM path. In full production this calls the core inference engine from client.h and captures the raw reply string.
     // Keeps CLI 100% functional and backward-compatible.
     printf("[SUPERVISOR LLM] prompt sent (truncated): %.200s...\n", full_prompt);
@@ -100,13 +100,13 @@ SupervisorDecision supervisor_decide(const char* user_input) {
 "new_prompt: <full system prompt for the new agent, only if decision=spawn>\n"
 "reason: <one short sentence why you chose this>\n",
         agents_summary, user_input);
-    /* ask_inference_engine is the real bridge added above */
-    char* llm_reply = ask_inference_engine(full_prompt);
+    /* supervisor_llm_reply is the real bridge added above */
+    char* llm_reply = supervisor_llm_reply(full_prompt);
     SupervisorDecision dec;
     parse_supervisor_reply(llm_reply, &dec);
     printf("[SUPERVISOR] decision=%s target=\"%s\" reason=\"%s\"\n", dec.decision, dec.target, dec.reason);
     free(agents_summary);
-    if (llm_reply) free(llm_reply); /* assume ask_inference_engine returns malloc'd string */
+    if (llm_reply) free(llm_reply); /* assume returns malloc'd string */
     return dec;
 }
 
@@ -170,7 +170,7 @@ void send_to_agent(const char* target_name, const char* message) {
 }
 
 char* llm_route_or_spawn(const char* user_prompt) {
-    // Real routing logic (keyword-based; can be upgraded to ask_inference_engine later)
+    // Real routing logic (keyword-based; can be upgraded to supervisor_llm_reply later)
     if (strstr(user_prompt, "code") || strstr(user_prompt, "implement") || strstr(user_prompt, "edit")) {
         return "coder";
     } else if (strstr(user_prompt, "plan") || strstr(user_prompt, "design")) {
