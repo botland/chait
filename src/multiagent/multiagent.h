@@ -37,4 +37,7 @@ extern SupervisorDecision supervisor_decide(const char* user_input);
 extern void register_active_agent(DynamicAgent* agent); // call from spawn
 extern char* get_active_agents_summary(void); // for LLM prompt
 
+// Added for orchestrator dispatch (to fix implicit declaration and duplicate definition)
+extern int orchestrator_main(const char *user_input);
+
 #endif
