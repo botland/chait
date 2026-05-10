@@ -33,6 +33,17 @@ void prune_history() {
     }
 }
 
+// Remove the last N messages (for loop abort cleanup)
+void prune_last_n(int n) {
+    if (n <= 0 || history_size == 0) return;
+    if (n > history_size) n = history_size;
+    for (int i = history_size - n; i < history_size; i++) {
+        if (chat_history[i].role) free(chat_history[i].role);
+        if (chat_history[i].content) free(chat_history[i].content);
+    }
+    history_size -= n;
+}
+
 // Free history at cleanup
 void free_history() {
     for (int i = 0; i < history_size; i++) {

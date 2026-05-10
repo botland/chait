@@ -129,6 +129,9 @@ void print_stream_advanced_markdown(const char* chunk);
 int append_string(char **buf, size_t *len, const char *text);
 void add_to_history(const char *role, const char *content);
 void set_last_tool_response_params(const char *tool_call_id, const char *tool_name, const char *content);
+void clear_last_tool_response_params(void);
+ToolResponseParams* get_last_tool_response_params(void);
+void send_tool_response(StreamState *state, const ToolCall *tool, const char *status, const char *content);
 
 // Json
 char* extract_message_from_json(const char* json_response);
@@ -198,6 +201,7 @@ int pty_printf(const char *fmt, ...);
 // History
 void add_to_history(const char *role, const char *content);
 void prune_history();
+void prune_last_n(int n);
 void free_history();
 
 // Command

@@ -1,6 +1,8 @@
 #include "client.h"
 #include "event.h"
 
+#define MAX_CONSECUTIVE_FAILURES 4
+
 bool enable_stream = true;
 bool enable_tools = false;
 char *system_prompt = NULL;
@@ -269,6 +271,8 @@ int run_multiloop_agent(AgentContext *ctx,
                         int max_loops) {
     if (!ctx) return -1;
 
+    clear_last_tool_response_params();
+
     memset(&ctx->tool_response, 0, sizeof(ctx->tool_response));
     ctx->loop_count = 0;
     ctx->consecutive_failures = 0;
@@ -307,8 +311,11 @@ int run_multiloop_agent(AgentContext *ctx,
         }
         ctx->last_tool_hash = tool_hash;
 
-        if (ctx->consecutive_failures >= 3) {
+        if (ctx->consecutive_failures > MAX_CONSECUTIVE_FAILURES) {
             fprintf(stderr, "\033[31m[SAFETY] Agent stuck in repeated tool loop — aborting\033[0m\n");
+            clear_last_tool_response_params();
+            prune_last_n(MAX_CONSECUTIVE_FAILURES);  // remove the entire failing cycle + safety buffer
+            add_to_history("system", "[SYSTEM] Previous tool loop was aborted due to repetition. Do not retry the same tool or action.");
             break;
         }
 
