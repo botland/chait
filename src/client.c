@@ -1,7 +1,7 @@
 #include "client.h"
 #include "event.h"
 
-#define MAX_CONSECUTIVE_FAILURES 4
+#define MAX_CONSECUTIVE_FAILURES 5
 
 bool enable_stream = true;
 bool enable_tools = false;
@@ -219,7 +219,7 @@ void process_events(StreamState *state) {
     }
 }
 
-// src/client.c — FIXED MULTILOOP AGENT v4 (compiles cleanly)
+// src/client.c — FIXED MULTILOOP AGENT v5 (aggressive prune on EVERY run + safety)
 
 static uint32_t hash_tool_calls(const char *tool_payload) {
     uint32_t hash = 5381;
@@ -265,6 +265,7 @@ void print_last_assistant_content(void) {
 
 /**
  * run_multiloop_agent — ReAct loop (AgentContext, no globals, compiles on hybrid-tools-refactor)
+ * v5: prune_last_n(8) at START of EVERY agent run + on abort to kill stale tool errors forever
  */
 int run_multiloop_agent(AgentContext *ctx,
                         const char *initial_user_input,
@@ -272,6 +273,10 @@ int run_multiloop_agent(AgentContext *ctx,
     if (!ctx) return -1;
 
     clear_last_tool_response_params();
+
+    // AGGRESSIVE RESET: prune ANY lingering failed tool cycle BEFORE building next prompt
+    // This fixes the leak you saw in the last run where "toto.c" error survived safety abort
+    prune_last_n(8);
 
     memset(&ctx->tool_response, 0, sizeof(ctx->tool_response));
     ctx->loop_count = 0;
@@ -314,7 +319,7 @@ int run_multiloop_agent(AgentContext *ctx,
         if (ctx->consecutive_failures > MAX_CONSECUTIVE_FAILURES) {
             fprintf(stderr, "\033[31m[SAFETY] Agent stuck in repeated tool loop — aborting\033[0m\n");
             clear_last_tool_response_params();
-            prune_last_n(MAX_CONSECUTIVE_FAILURES);  // remove the entire failing cycle + safety buffer
+            prune_last_n(8);  // even stronger cleanup on abort
             add_to_history("system", "[SYSTEM] Previous tool loop was aborted due to repetition. Do not retry the same tool or action.");
             break;
         }
