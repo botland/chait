@@ -23,7 +23,7 @@
 #include <signal.h>
 
 #define RUN_CHAT_CLIENT
-#define DEBUG_LEVEL 1
+#define DEBUG_LEVEL 0
 
 // Define constants
 #define SERVER_URL "http://192.168.1.16:8080/v1/chat/completions"
@@ -137,7 +137,7 @@ int stream_from_llama_server(char *json_response);
 void print_stream_advanced_markdown(const char* chunk);
 int append_string(char **buf, size_t *len, const char *text);
 void add_to_history(const char *role, const char *content);
-void set_last_tool_response_params(const char *tool_call_id, const char *tool_name, const char *content, ToolStatus status);
+void set_last_tool_response_params(const ToolCall *tool, const char *content, ToolStatus status);
 void clear_last_tool_response_params(void);
 ToolResponseParams* get_last_tool_response_params(void);
 void send_tool_response(StreamState *state, const ToolCall *tool, ToolStatus status, const char *content);

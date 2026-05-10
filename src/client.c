@@ -40,8 +40,9 @@ void build_assistant_tool_call(cJSON *messages, ToolResponseParams *params) {
     cJSON_AddItemToArray(messages, msg);
 
 //    char history_msg[BUFFER_SIZE];
-//    snprintf(history_msg, sizeof(msg), "calling %s %s", params->tool_name, params->tool_arguments);
-    add_to_history("assistant", NULL);
+//    snprintf(history_msg, sizeof(history_msg), "calling %s %s", params->tool_name, params->tool_arguments);
+//    snprintf(history_msg, sizeof(history_msg), "calling %s %s", params->tool_name ? params->tool_name : "", params->tool_arguments ? params->tool_arguments : "{}");
+//    add_to_history("assistant", history_msg);
 }
 
 void build_tool_response(cJSON *messages, ToolResponseParams *params) {
@@ -52,7 +53,7 @@ void build_tool_response(cJSON *messages, ToolResponseParams *params) {
         cJSON_AddStringToObject(msg, "tool_call_id", params->tool_call_id);
         cJSON_AddStringToObject(msg, "name", params->tool_name);
         cJSON_AddItemToArray(messages, msg);
-        add_to_history("tool", params->content);
+//        add_to_history("tool", params->content);
     }
 }
 
@@ -84,12 +85,13 @@ int ask_inference_engine(char *user_input, ToolResponseParams *trp) {
     cJSON *root = cJSON_CreateObject();
     cJSON *messages = cJSON_CreateArray();
 
-    for (int i = 0; i < history_size; i++) {
-        build_prompt(messages, chat_history[i].role, chat_history[i].content);
-    }
     if (system_prompt) {
         build_prompt(messages, "system", system_prompt);
     }
+    for (int i = 0; i < history_size; i++) {
+        build_prompt(messages, chat_history[i].role, chat_history[i].content);
+    }
+
     if (trp) {
         build_assistant_tool_call(messages, trp);
         build_tool_response(messages, trp);
@@ -99,7 +101,7 @@ int ask_inference_engine(char *user_input, ToolResponseParams *trp) {
     cJSON_AddItemToObject(root, "messages", messages);
     cJSON_AddNumberToObject(root, "temperature", 0.1);
     cJSON_AddNumberToObject(root, "max_tokens", 8192);
-    cJSON_AddStringToObject(root, "model", "lexi8b");
+//    cJSON_AddStringToObject(root, "model", "lexi8b");
     if (do_stream) {
         cJSON_AddTrueToObject(root, "stream");
     }
@@ -110,11 +112,6 @@ int ask_inference_engine(char *user_input, ToolResponseParams *trp) {
 
         cJSON *tools = cJSON_CreateArray();
         append_all_tool_definitions(tools);
-
-        // Temporary fallback (remove after migrating each tool)
-        cJSON_AddItemToArray(tools, create_find_file_path_tool());
-        cJSON_AddItemToArray(tools, create_get_file_content_tool());
-        cJSON_AddItemToArray(tools, create_save_to_file_tool());
 
         cJSON_AddItemToObject(root, "tools", tools);
         cJSON_AddStringToObject(root, "tool_choice", "auto");
@@ -219,8 +216,6 @@ void process_events(StreamState *state) {
     }
 }
 
-// src/client.c — FIXED MULTILOOP AGENT v5 (aggressive prune on EVERY run + safety)
-
 static uint32_t hash_tool_calls(const char *tool_payload) {
     uint32_t hash = 5381;
     while (*tool_payload) {
@@ -235,12 +230,14 @@ ToolResponseParams* get_last_tool_response_params(void) {
     return &last_trp_static;
 }
 
-void set_last_tool_response_params(const char *tool_call_id, const char *tool_name, const char *content, ToolStatus status) {
+void set_last_tool_response_params(const ToolCall *tool, const char *content, ToolStatus status) {
     if (last_trp_static.tool_call_id) free(last_trp_static.tool_call_id);
     if (last_trp_static.tool_name) free(last_trp_static.tool_name);
+    if (last_trp_static.tool_arguments) free(last_trp_static.tool_arguments);
     if (last_trp_static.content) free(last_trp_static.content);
-    last_trp_static.tool_call_id = tool_call_id ? strdup(tool_call_id) : NULL;
-    last_trp_static.tool_name = tool_name ? strdup(tool_name) : NULL;
+    last_trp_static.tool_call_id = tool->id ? strdup(tool->id) : NULL;
+    last_trp_static.tool_name = tool->function_name ? strdup(tool->function_name) : NULL;
+    last_trp_static.tool_arguments = tool->function_arguments ? strdup(tool->function_arguments) : NULL;
     last_trp_static.content = content ? strdup(content) : NULL;
     last_trp_static.status = status;
 }
@@ -248,6 +245,7 @@ void set_last_tool_response_params(const char *tool_call_id, const char *tool_na
 void clear_last_tool_response_params(void) {
     if (last_trp_static.tool_call_id) free(last_trp_static.tool_call_id);
     if (last_trp_static.tool_name) free(last_trp_static.tool_name);
+    if (last_trp_static.tool_arguments) free(last_trp_static.tool_arguments);
     if (last_trp_static.content) free(last_trp_static.content);
     memset(&last_trp_static, 0, sizeof(last_trp_static));
 }
@@ -256,28 +254,12 @@ bool last_response_has_tool_calls(void) {
     return (last_trp_static.tool_name != NULL);
 }
 
-bool last_response_has_content(void) {
-    return true;   // content already printed by process_events
-}
-
-void print_last_assistant_content(void) {
-    // no-op — content is already streamed by EVENT_TEXT
-}
-
-/**
- * run_multiloop_agent — ReAct loop (AgentContext, no globals, compiles on hybrid-tools-refactor)
- * v5: prune_last_n(8) at START of EVERY agent run + on abort to kill stale tool errors forever
- */
 int run_multiloop_agent(AgentContext *ctx,
                         const char *initial_user_input,
                         int max_loops) {
     if (!ctx) return -1;
 
     clear_last_tool_response_params();
-
-    // AGGRESSIVE RESET: prune ANY lingering failed tool cycle BEFORE building next prompt
-    // This fixes the leak you saw in the last run where "toto.c" error survived safety abort
-    prune_last_n(8);
 
     memset(&ctx->tool_response, 0, sizeof(ctx->tool_response));
     ctx->loop_count = 0;
@@ -306,7 +288,9 @@ int run_multiloop_agent(AgentContext *ctx,
 
         trp = get_last_tool_response_params();
 
-        uint32_t tool_hash = hash_tool_calls(trp->tool_arguments ? trp->tool_arguments : "");
+        char hash_input[2048];
+        snprintf(hash_input, sizeof(hash_input), "%s|%s", trp->tool_name ? trp->tool_name : "", trp->tool_arguments ? trp->tool_arguments : "");
+        uint32_t tool_hash = hash_tool_calls(hash_input);
         if (tool_hash == ctx->last_tool_hash) {
             ctx->consecutive_failures++;
             fprintf(stderr, "\033[33m[WARNING] Repeated tool pattern (loop %d)\033[0m\n", ctx->loop_count);
