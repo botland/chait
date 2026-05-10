@@ -76,8 +76,12 @@ static void parse_supervisor_reply(const char* reply, SupervisorDecision* dec) {
 char* supervisor_llm_reply(const char* full_prompt) {
     printf("[SUPERVISOR LLM] prompt sent (truncated): %.200s...\n", full_prompt);
 
+    size_t pre_history = history_size;
+
     // Real inference engine call (internal, no 'LLaMA:' print because we capture from history)
     ask_inference_engine((char*)full_prompt, NULL);
+
+
 
     // Capture the raw LLM reply from the shared history (last assistant message added by the inference engine)
     if (history_size > 0 && strcmp(chat_history[history_size-1].role, "assistant") == 0) {
@@ -85,10 +89,26 @@ char* supervisor_llm_reply(const char* full_prompt) {
         return reply;
     }
 
+    // Capture after any tool response/error (searches backwards for latest assistant message)
+    for (int i = history_size - 1; i >= 0; i--) {
+        if (strcmp(chat_history[i].role, "assistant") == 0 && chat_history[i].content) {
+            return strdup(chat_history[i].content);
+        }
+    }
+
+    char* reply = NULL;
+    for (int i = history_size - 1; i >= (int)pre_history; i--) {
+        if (strcmp(chat_history[i].role, "assistant") == 0 && chat_history[i].content) {
+            reply = strdup(chat_history[i].content);
+            break;
+        }
+    }
+    if (!reply) reply = strdup("decision: direct_response\ntask: [error recovery] supervisor still active");
+
     // fallback safety (should never hit with real LLM)
-    char* reply = malloc(2048);
-    if (!reply) return NULL;
-    snprintf(reply, 2048, "decision: direct_response\ntarget: \ntask: [Supervisor live] LLM decision system active - see console for routing\nreason: supervisor layer pushed and integrated\nnew_name: \nnew_prompt: \n");
+//    char* reply = malloc(2048);
+//    if (!reply) return NULL;
+//    snprintf(reply, 2048, "decision: direct_response\ntarget: \ntask: [Supervisor live] LLM decision system active - see console for routing\nreason: supervisor layer pushed and integrated\nnew_name: \nnew_prompt: \n");
     return reply;
 }
 
