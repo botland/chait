@@ -81,7 +81,7 @@ void execute_save_to_file(StreamState *state, const ToolCall *tool) {
             char *success_msg = NULL;
             asprintf(&success_msg, "File successfully saved/overwritten at %s", file_path);
 
-            send_tool_response(state, tool, "success", success_msg);
+            send_tool_response(state, tool, TOOL_SUCCESS, success_msg);
             free(success_msg);
         } else {
             fprintf(stderr, "Partial write to %s (%zu/%zu bytes)\n", 

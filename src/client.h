@@ -59,12 +59,21 @@ typedef struct {
     char *function_arguments;
 } ToolCall;
 
+typedef enum {
+    TOOL_STATUS_UNDEFINED = 0,
+    TOOL_SUCCESS,
+    TOOL_ERROR,
+    TOOL_PARTIAL,
+    TOOL_NOT_FOUND
+} ToolStatus;
+
 // Struct for tool response data
 typedef struct {
     char *tool_call_id;
     char *tool_name;
     char *tool_arguments;
     char *content;
+    ToolStatus status;
 } ToolResponseParams;
 
 typedef struct {
@@ -130,7 +139,9 @@ int stream_from_llama_server(char *json_response);
 void print_stream_advanced_markdown(const char* chunk);
 int append_string(char **buf, size_t *len, const char *text);
 void add_to_history(const char *role, const char *content);
-void set_last_tool_response_params(const char *tool_call_id, const char *tool_name, const char *content);
+void set_last_tool_response_params(const ToolCall *tool, const char *content, ToolStatus status);
+void clear_last_tool_response_params(void);
+ToolResponseParams* get_last_tool_response_params(void);
 
 // Json
 char* extract_message_from_json(const char* json_response);
@@ -185,7 +196,7 @@ void free_tool_call(ToolCall *tool);
 void free_tool_response_params(ToolResponseParams *params);
 void reset_state(StreamState *state);
 void print_stream_state(const StreamState *state, const char *label);
-void send_tool_response(StreamState *state, const ToolCall *tool, const char *status, const char *content);
+void send_tool_response(StreamState *state, const ToolCall *tool, ToolStatus status, const char *content);
 
 // Event system
 void process_events(StreamState *state);  // NEW: central executor
@@ -201,6 +212,7 @@ int pty_printf(const char *fmt, ...);
 // History
 void add_to_history(const char *role, const char *content);
 void prune_history();
+void prune_last_n(int n);
 void free_history();
 
 // Command

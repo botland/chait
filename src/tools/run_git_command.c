@@ -34,21 +34,21 @@ cJSON *create_run_git_command_tool(void) {
 // ====================== EXECUTION ======================
 void execute_run_git_command(StreamState *state, const ToolCall *tool) {
     if (!tool || !tool->function_arguments) {
-        send_tool_response(state, tool, "error", "No arguments provided");
+        send_tool_response(state, tool, TOOL_ERROR, "No arguments provided");
         return;
     }
 
     // Simple argument parsing (arguments is JSON string)
     cJSON *args = cJSON_Parse(tool->function_arguments);
     if (!args) {
-        send_tool_response(state, tool, "error", "Failed to parse arguments");
+        send_tool_response(state, tool, TOOL_ERROR, "Failed to parse arguments");
         return;
     }
 
     cJSON *command_item = cJSON_GetObjectItem(args, "command");
     if (!command_item || !command_item->valuestring || strlen(command_item->valuestring) == 0) {
         cJSON_Delete(args);
-        send_tool_response(state, tool, "error", "No command provided");
+        send_tool_response(state, tool, TOOL_ERROR, "No command provided");
         return;
     }
 
@@ -61,7 +61,7 @@ void execute_run_git_command(StreamState *state, const ToolCall *tool) {
     FILE *pipe = popen(full_command, "r");
     if (!pipe) {
         cJSON_Delete(args);
-        send_tool_response(state, tool, "error", "Failed to start git command");
+        send_tool_response(state, tool, TOOL_ERROR, "Failed to start git command");
         return;
     }
 
@@ -71,7 +71,7 @@ void execute_run_git_command(StreamState *state, const ToolCall *tool) {
     if (!output) {
         pclose(pipe);
         cJSON_Delete(args);
-        send_tool_response(state, tool, "error", "Memory allocation failed");
+        send_tool_response(state, tool, TOOL_ERROR, "Memory allocation failed");
         return;
     }
     output[0] = '\0';
@@ -84,7 +84,7 @@ void execute_run_git_command(StreamState *state, const ToolCall *tool) {
             free(output);
             pclose(pipe);
             cJSON_Delete(args);
-            send_tool_response(state, tool, "error", "Memory reallocation failed while reading git output");
+            send_tool_response(state, tool, TOOL_ERROR, "Memory reallocation failed while reading git output");
             return;
         }
         output = new_output;
@@ -98,7 +98,7 @@ void execute_run_git_command(StreamState *state, const ToolCall *tool) {
 
     // Always return success with the captured output (git errors appear in the output because of 2>&1)
     // The LLM can interpret non-zero exit codes via the content if needed.
-    send_tool_response(state, tool, "success", output);
+    send_tool_response(state, tool, TOOL_SUCCESS, output);
     free(output);
 }
 

@@ -15,7 +15,7 @@ void add_to_history(const char *role, const char *content) {
         }
     }
     chat_history[history_size].role = strdup(role);
-    chat_history[history_size].content = strdup(content ? content : "");
+    chat_history[history_size].content = content ? strdup(content) : "";
     history_size++;
 }
 
@@ -31,6 +31,17 @@ void prune_history() {
         memmove(chat_history, chat_history + shift, max_entries * sizeof(Message));
         history_size = max_entries;
     }
+}
+
+// Remove the last N messages (for loop abort cleanup)
+void prune_last_n(int n) {
+    if (n <= 0 || history_size == 0) return;
+    if (n > history_size) n = history_size;
+    for (int i = history_size - n; i < history_size; i++) {
+        if (chat_history[i].role) free(chat_history[i].role);
+        if (chat_history[i].content) free(chat_history[i].content);
+    }
+    history_size -= n;
 }
 
 // Free history at cleanup

@@ -112,9 +112,9 @@ void execute_find_file_path(StreamState *state, const ToolCall *tool) {
     cJSON_Delete(args_root);
 
     if (!count) {
-        send_tool_response(state, tool, "error", "No matching files found.");
+        send_tool_response(state, tool, TOOL_ERROR, "No matching files found.");
     } else {
-        send_tool_response(state, tool, "success", content);
+        send_tool_response(state, tool, TOOL_SUCCESS, content);
     }
     free(content); 
 }

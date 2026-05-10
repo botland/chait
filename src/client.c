@@ -1,6 +1,8 @@
 #include "client.h"
 #include "event.h"
 
+#define MAX_CONSECUTIVE_FAILURES 5
+
 bool enable_agents = false;
 bool enable_stream = true;
 bool enable_tools = false;
@@ -39,8 +41,9 @@ void build_assistant_tool_call(cJSON *messages, ToolResponseParams *params) {
     cJSON_AddItemToArray(messages, msg);
 
 //    char history_msg[BUFFER_SIZE];
-//    snprintf(history_msg, sizeof(msg), "calling %s %s", params->tool_name, params->tool_arguments);
-    add_to_history("assistant", NULL);
+//    snprintf(history_msg, sizeof(history_msg), "calling %s %s", params->tool_name, params->tool_arguments);
+//    snprintf(history_msg, sizeof(history_msg), "calling %s %s", params->tool_name ? params->tool_name : "", params->tool_arguments ? params->tool_arguments : "{}");
+//    add_to_history("assistant", history_msg);
 }
 
 void build_tool_response(cJSON *messages, ToolResponseParams *params) {
@@ -51,7 +54,7 @@ void build_tool_response(cJSON *messages, ToolResponseParams *params) {
         cJSON_AddStringToObject(msg, "tool_call_id", params->tool_call_id);
         cJSON_AddStringToObject(msg, "name", params->tool_name);
         cJSON_AddItemToArray(messages, msg);
-        add_to_history("tool", params->content);
+//        add_to_history("tool", params->content);
     }
 }
 
@@ -83,12 +86,13 @@ int ask_inference_engine(char *user_input, ToolResponseParams *trp) {
     cJSON *root = cJSON_CreateObject();
     cJSON *messages = cJSON_CreateArray();
 
-    for (int i = 0; i < history_size; i++) {
-        build_prompt(messages, chat_history[i].role, chat_history[i].content);
-    }
     if (system_prompt) {
         build_prompt(messages, "system", system_prompt);
     }
+    for (int i = 0; i < history_size; i++) {
+        build_prompt(messages, chat_history[i].role, chat_history[i].content);
+    }
+
     if (trp) {
         build_assistant_tool_call(messages, trp);
         build_tool_response(messages, trp);
@@ -98,7 +102,7 @@ int ask_inference_engine(char *user_input, ToolResponseParams *trp) {
     cJSON_AddItemToObject(root, "messages", messages);
     cJSON_AddNumberToObject(root, "temperature", 0.1);
     cJSON_AddNumberToObject(root, "max_tokens", 8192);
-    cJSON_AddStringToObject(root, "model", "lexi8b");
+//    cJSON_AddStringToObject(root, "model", "lexi8b");
     if (do_stream) {
         cJSON_AddTrueToObject(root, "stream");
     }
@@ -109,11 +113,6 @@ int ask_inference_engine(char *user_input, ToolResponseParams *trp) {
 
         cJSON *tools = cJSON_CreateArray();
         append_all_tool_definitions(tools);
-
-        // Temporary fallback (remove after migrating each tool)
-        cJSON_AddItemToArray(tools, create_find_file_path_tool());
-        cJSON_AddItemToArray(tools, create_get_file_content_tool());
-        cJSON_AddItemToArray(tools, create_save_to_file_tool());
 
         cJSON_AddItemToObject(root, "tools", tools);
         cJSON_AddStringToObject(root, "tool_choice", "auto");
@@ -218,8 +217,6 @@ void process_events(StreamState *state) {
     }
 }
 
-// src/client.c — FIXED MULTILOOP AGENT v4 (compiles cleanly)
-
 static uint32_t hash_tool_calls(const char *tool_payload) {
     uint32_t hash = 5381;
     while (*tool_payload) {
@@ -234,18 +231,22 @@ ToolResponseParams* get_last_tool_response_params(void) {
     return &last_trp_static;
 }
 
-void set_last_tool_response_params(const char *tool_call_id, const char *tool_name, const char *content) {
+void set_last_tool_response_params(const ToolCall *tool, const char *content, ToolStatus status) {
     if (last_trp_static.tool_call_id) free(last_trp_static.tool_call_id);
     if (last_trp_static.tool_name) free(last_trp_static.tool_name);
+    if (last_trp_static.tool_arguments) free(last_trp_static.tool_arguments);
     if (last_trp_static.content) free(last_trp_static.content);
-    last_trp_static.tool_call_id = tool_call_id ? strdup(tool_call_id) : NULL;
-    last_trp_static.tool_name = tool_name ? strdup(tool_name) : NULL;
+    last_trp_static.tool_call_id = tool->id ? strdup(tool->id) : NULL;
+    last_trp_static.tool_name = tool->function_name ? strdup(tool->function_name) : NULL;
+    last_trp_static.tool_arguments = tool->function_arguments ? strdup(tool->function_arguments) : NULL;
     last_trp_static.content = content ? strdup(content) : NULL;
+    last_trp_static.status = status;
 }
 
 void clear_last_tool_response_params(void) {
     if (last_trp_static.tool_call_id) free(last_trp_static.tool_call_id);
     if (last_trp_static.tool_name) free(last_trp_static.tool_name);
+    if (last_trp_static.tool_arguments) free(last_trp_static.tool_arguments);
     if (last_trp_static.content) free(last_trp_static.content);
     memset(&last_trp_static, 0, sizeof(last_trp_static));
 }
@@ -254,21 +255,12 @@ bool last_response_has_tool_calls(void) {
     return (last_trp_static.tool_name != NULL);
 }
 
-bool last_response_has_content(void) {
-    return true;   // content already printed by process_events
-}
-
-void print_last_assistant_content(void) {
-    // no-op — content is already streamed by EVENT_TEXT
-}
-
-/**
- * run_multiloop_agent — ReAct loop (AgentContext, no globals, compiles on hybrid-tools-refactor)
- */
 int run_multiloop_agent(AgentContext *ctx,
                         const char *initial_user_input,
                         int max_loops) {
     if (!ctx) return -1;
+
+    clear_last_tool_response_params();
 
     memset(&ctx->tool_response, 0, sizeof(ctx->tool_response));
     ctx->loop_count = 0;
@@ -292,14 +284,14 @@ int run_multiloop_agent(AgentContext *ctx,
 
         if (!last_response_has_tool_calls()) {
             ctx->finished = true;
-            printf("\033[32m\n[Agent finished after %d loop%s]\033[0m\n",
-                   ctx->loop_count, ctx->loop_count == 1 ? "" : "s");
-            return ctx->loop_count;
+            break;
         }
 
         trp = get_last_tool_response_params();
 
-        uint32_t tool_hash = hash_tool_calls(trp->tool_arguments ? trp->tool_arguments : "");
+        char hash_input[2048];
+        snprintf(hash_input, sizeof(hash_input), "%s|%s", trp->tool_name ? trp->tool_name : "", trp->tool_arguments ? trp->tool_arguments : "");
+        uint32_t tool_hash = hash_tool_calls(hash_input);
         if (tool_hash == ctx->last_tool_hash) {
             ctx->consecutive_failures++;
             fprintf(stderr, "\033[33m[WARNING] Repeated tool pattern (loop %d)\033[0m\n", ctx->loop_count);
@@ -308,8 +300,9 @@ int run_multiloop_agent(AgentContext *ctx,
         }
         ctx->last_tool_hash = tool_hash;
 
-        if (ctx->consecutive_failures >= 3) {
+        if (ctx->consecutive_failures > MAX_CONSECUTIVE_FAILURES) {
             fprintf(stderr, "\033[31m[SAFETY] Agent stuck in repeated tool loop — aborting\033[0m\n");
+            add_to_history("system", "[SYSTEM] Previous tool loop was aborted due to repetition. Do not retry the same tool or action.");
             break;
         }
 
@@ -320,8 +313,12 @@ int run_multiloop_agent(AgentContext *ctx,
         printf("\033[2m[Loop %d complete — tool response injected]\033[0m\n", ctx->loop_count);
     }
 
-    if (!ctx->finished) {
-        printf("\033[33m[Agent stopped after %d loops (max/safety)]\033[0m\n", ctx->loop_count);
+    if (!ctx->finished || (trp != NULL && trp->status != TOOL_SUCCESS)) {
+        printf("\033[33m[Agent stopped after %d loop%s]\033[0m\n", ctx->loop_count, ctx->loop_count == 1 ? "" : "s");
+        clear_last_tool_response_params();
+        prune_last_n(ctx->loop_count);
+    } else {
+        printf("\033[32m\n[Agent finished after %d loop%s]\033[0m\n", ctx->loop_count, ctx->loop_count == 1 ? "" : "s");
     }
     return ctx->loop_count;
 }
