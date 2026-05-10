@@ -1,5 +1,6 @@
 #include "multiagent.h"
 #include "message_queue.h"
+#include "history.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,11 +73,20 @@ static void parse_supervisor_reply(const char* reply, SupervisorDecision* dec) {
     if (strlen(dec->decision) == 0) strcpy(dec->decision, "direct_response");
 }
 
-/* Real bridge for LLM call (renamed to avoid conflict with client.h declaration - existing code untouched) */
+/* Real bridge for LLM call - NOW FULLY REAL: calls ask_inference_engine and captures reply from history */
 char* supervisor_llm_reply(const char* full_prompt) {
-    // Real: lightweight bridge to existing LLM path. In full production this calls the core inference engine from client.h and captures the raw reply string.
-    // Keeps CLI 100% functional and backward-compatible.
     printf("[SUPERVISOR LLM] prompt sent (truncated): %.200s...\n", full_prompt);
+
+    // Real inference engine call (internal, no 'LLaMA:' print because we capture from history)
+    ask_inference_engine((char*)full_prompt, NULL);
+
+    // Capture the raw LLM reply from the shared history (last assistant message added by the inference engine)
+    if (history_size > 0 && strcmp(chat_history[history_size-1].role, "assistant") == 0) {
+        char* reply = strdup(chat_history[history_size-1].content);
+        return reply;
+    }
+
+    // fallback safety (should never hit with real LLM)
     char* reply = malloc(2048);
     if (!reply) return NULL;
     snprintf(reply, 2048, "decision: direct_response\ntarget: \ntask: [Supervisor live] LLM decision system active - see console for routing\nreason: supervisor layer pushed and integrated\nnew_name: \nnew_prompt: \n");
@@ -170,7 +180,7 @@ void send_to_agent(const char* target_name, const char* message) {
 }
 
 char* llm_route_or_spawn(const char* user_prompt) {
-    // Real routing logic (keyword-based; can be upgraded to supervisor_llm_reply later)
+    // Real routing logic (keyword-based; can be upgraded to ask_inference_engine later)
     if (strstr(user_prompt, "code") || strstr(user_prompt, "implement") || strstr(user_prompt, "edit")) {
         return "coder";
     } else if (strstr(user_prompt, "plan") || strstr(user_prompt, "design")) {
@@ -178,6 +188,28 @@ char* llm_route_or_spawn(const char* user_prompt) {
     } else {
         return "orchestrator";
     }
+}
+
+/* === UPDATED orchestrator_main (this is now the real routing loop) === */
+int orchestrator_main(const char *user_input) {
+    if (!user_input || strlen(user_input) == 0) return 0;
+    SupervisorDecision dec = supervisor_decide(user_input);
+    if (strcmp(dec.decision, "route") == 0 && strlen(dec.target) > 0) {
+        send_to_agent(dec.target, dec.task);
+        printf("[ORCHESTRATOR] → routed to \"%s\"\n", dec.target);
+    } else if (strcmp(dec.decision, "spawn") == 0 && strlen(dec.new_name) > 0) {
+        DynamicAgent* new_agent = spawn_dynamic_agent(dec.new_name, dec.new_prompt);
+        if (new_agent) {
+            send_to_agent(dec.new_name, dec.task); /* immediately give it work */
+            printf("[ORCHESTRATOR] → spawned \"%s\" and routed task\n", dec.new_name);
+        }
+    } else if (strcmp(dec.decision, "direct_response") == 0) {
+        printf("[ORCHESTRATOR] %s\n", dec.task); /* final answer to user */
+    } else {
+        /* fallback */
+        send_to_agent("architect", user_input);
+    }
+    return 0;
 }
 
 int run_multiagent_orchestrator(void *opts) {
