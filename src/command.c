@@ -17,16 +17,21 @@ int is_command_local(const char *input) {
        printf("h or help          : help\n");
        printf("rh                 : reset history\n");
        printf("sp <system_prompt> : set system prompt\n");
+       printf("ta                 : toggle agents\n");
        printf("ts                 : toggle stream mode\n");
        printf("tt                 : toggle tools\n");
        printf("q or quit          : quit\n");
        return 1;
-/*    } else if (strcmp(input, "sp")) {
+    } else if (!strcmp(input, "sp")) {
         printf("System prompt is: %s\n", system_prompt);
-        return 1;*/
+        return 1;
     } else if (!strncmp(input, "sp ", 3)) {
         copy_after_first_space(input, &system_prompt);
         printf("System prompt is: %s\n", system_prompt);
+        return 1;
+    } else if (!strcmp(input, "ta")) {
+        enable_agents = !enable_agents;
+        printf("Agents are %s\n", enable_stream ? "enabled" : "disabled");
         return 1;
     } else if (!strcmp(input, "ts")) {
         enable_stream = !enable_stream;

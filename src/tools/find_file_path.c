@@ -29,7 +29,7 @@ cJSON *create_find_file_path_tool(void) {
 
     cJSON *p2 = cJSON_CreateObject();
     cJSON_AddStringToObject(p2, "type", "string");
-    cJSON_AddStringToObject(p2, "description", "The root path to start searching from (optional, defaults to current directory).");
+    cJSON_AddStringToObject(p2, "description", "The root path to start searching from (optional, defaults to '.').");
     cJSON_AddItemToObject(props, "root_path", p2);
 
     cJSON *p3 = cJSON_CreateObject();

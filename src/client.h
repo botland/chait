@@ -110,6 +110,7 @@ extern Message *chat_history;
 extern int history_size;
 extern int master_fd;
 
+extern bool enable_agents;
 extern bool enable_stream;
 extern bool enable_tools;
 extern char *system_prompt;
@@ -205,5 +206,8 @@ void free_history();
 // Command
 int is_command_local(const char *input);
 int is_command(const char *input);
+
+// Helpers
+const char* format(const char* format, ...);
 
 #endif // CLIENT_H

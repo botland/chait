@@ -68,14 +68,14 @@ void execute_get_file_content(StreamState *state, const ToolCall *tool) {
 
     if (access(path, R_OK) != 0) {
         cJSON_Delete(args);
-        send_tool_response(state, tool, "error", "Error opening file or file not found");
+        send_tool_response(state, tool, "error", format("Error opening file or file not found: %s", path));
         return;
     }
 
     FILE *f = fopen(path, "r");
     if (!f) {
         cJSON_Delete(args);
-        send_tool_response(state, tool, "error", "Failed to open file");
+        send_tool_response(state, tool, "error", format("Failed to open file: %s", path));
         return;
     }
 

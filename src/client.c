@@ -1,6 +1,7 @@
 #include "client.h"
 #include "event.h"
 
+bool enable_agents = false;
 bool enable_stream = true;
 bool enable_tools = false;
 char *system_prompt = NULL;
