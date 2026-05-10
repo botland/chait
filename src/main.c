@@ -1,3 +1,44 @@
+#define _XOPEN_SOURCE 700
+
+#include "client.h"
+#include "multiagent/multiagent.h"
+
+#include <fcntl.h>
+#include <termios.h>
+#include <sys/wait.h>
+#include <sys/select.h>
+#include <signal.h>
+#include <errno.h>
+#include <sys/ioctl.h>
+#include <ctype.h>
+
+int master_fd = -1;
+
+static volatile sig_atomic_t running = 1;
+static void sig_handler(int sig) { (void)sig; running = 0; }
+
+int append_string(char **buf, size_t *len, const char *text) {
+    if (!text || !*text) {
+        return 1;   /* success - nothing to do */
+    }
+
+    size_t add = strlen(text);
+    size_t needed = *len + add + 1;
+
+    char *new_buf = realloc(*buf, needed);
+    if (!new_buf) {
+        return 0;   /* failure */
+    }
+
+    *buf = new_buf;
+
+    memcpy(*buf + *len, text, add);
+    *len += add;
+    (*buf)[*len] = '\0';
+
+    return 1;   /* success */
+}
+
 int run_chat_client() {
     // Initialize conversation history (no more flat string)
     // Load persistent input history from file (emulates bash ~/.bash_history)
@@ -16,9 +57,6 @@ int run_chat_client() {
 
     printf("LLaMA Chat Client (type 'quit' to exit)\n");
     printf("========================================\n");
-
-    // Spawn default multi-agent crew (architect, coder, tester) + register them for supervisor routing
-    run_multiagent_orchestrator(NULL);
 
     char *input;
     while (1) {
@@ -56,6 +94,9 @@ int run_chat_client() {
             // Execute command
             system(input);
         } else {
+//            ask_inference_engine(input, NULL);  // No history param anymore
+//            AgentContext ctx = {0};
+//            run_multiloop_agent(&ctx, input, 12);
             orchestrator_main(input);
         }
 
@@ -81,11 +122,43 @@ void handle_llm_prompt(const char *input) {
         perror("write_history");
     }
 
+//    llm_printf("%s\n", input);
+//    ask_inference_engine(input, NULL);  // No history param anymore
+//    AgentContext ctx = {0};
+//    run_multiloop_agent(&ctx, input, 12);
     orchestrator_main(input);
 
     prune_history();  // Prune after adding user (before request)
 }
 
+static void handle_llm_with_history(const char *typed_line) {
+    /*
+     * At this point:
+     * - bash has already accepted the line
+     * - history is already updated
+     * - prompt has advanced to the next line
+     *
+     * We ONLY print the LLM output.
+     */
+
+    // Safety: ensure separation from prompt
+//    write(master_fd, "\n", 1);
+//    write(master_fd, "\n", 1);
+//    write(master_fd, "\n", 1);
+
+
+    // Run LLM, force all output through the PTY
+    handle_llm_prompt(typed_line);
+
+    // Ensure we end on a clean line before bash redraws prompt
+//    write(master_fd, "\n", 1);
+}
+bool in_escape = false;
+bool in_csi = false;
+bool in_ansi_seq = false;
+// ────────────────────────────────────────────────
+// PTY raw input loop (extracted for clarity)
+// ────────────────────────────────────────────────
 static void handle_raw_input_loop() {
     fd_set rset;
     char buf[4096];
@@ -129,6 +202,26 @@ static void handle_raw_input_loop() {
         continue;  // Skip accumulation
     }
 
+// Handle escape sequence state transitions
+/*if (in_escape) {
+    if (!in_ansi_seq && (c == '[' || c == 'O')) {
+        in_ansi_seq = true;
+    } else if (in_ansi_seq && (c >= '@' && c <= '~')) {  // 0x40-0x7E covers letters, ~, etc.
+        in_escape = false;
+        in_ansi_seq = false;
+    } else if (!in_ansi_seq && (c >= '@' && c <= '~')) {
+        in_escape = false;
+        in_ansi_seq = false;
+    }
+    // In escape: forward byte but skip further processing that accumulates
+    write(master_fd, &c, 1);
+    continue;  // Skip accumulation and other checks
+} else if (c == '\x1b') {  // ESC (27)
+    in_escape = true;
+    write(master_fd, &c, 1);
+    continue;  // Skip accumulation
+}*/
+
                 if (c == '\n' || c == '\r') {
                     line[line_len] = '\0';
 
@@ -143,6 +236,7 @@ static void handle_raw_input_loop() {
                             }
 
                             printf("\n\r");
+//write(master_fd, "\n", 1); write(master_fd, "\r", 1);
                             if (!is_command_local(line)) {
                                 handle_llm_prompt(line);
                             }
@@ -187,7 +281,15 @@ static void handle_raw_input_loop() {
         }
     }
 }
-
+void winch_handler(int sig) {
+    struct winsize ws;
+    if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0) {
+        ioctl(master_fd, TIOCSWINSZ, &ws);
+    }
+}
+// ────────────────────────────────────────────────
+// Main entry point
+// ────────────────────────────────────────────────
 int main(void) {
 #ifdef RUN_CHAT_CLIENT
     return run_chat_client();
@@ -233,13 +335,33 @@ int main(void) {
         dup2(slave_fd, 2);
         if (slave_fd > 2) close(slave_fd);
 
-        setenv("PS1", "\[\\e[1;34m\]PTY-SHELL \\w \\$ \\[\\e[0m\] ", 1);
-        execlp("/bin/bash", "/bin/bash", NULL);
-        _exit(1);
+        setenv("PS1", "\\[\\e[1;34m\\]PTY-SHELL \\w \\$ \\[\\e[0m\\] ", 1);
+        execlp("/bin/bash", "bash", "--norc", (char *)NULL);
+
+        perror("execlp bash"); _exit(127);
     }
 
-    // parent — PTY mode
-    // (rest of PTY setup and loop omitted for brevity in this push; original code preserved)
+    // parent
+    tcgetattr(STDIN_FILENO, &orig_term);
+    raw_term = orig_term;
+    cfmakeraw(&raw_term);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw_term);
+
+    signal(SIGINT,  sig_handler);
+    signal(SIGTERM, sig_handler);
+    signal(SIGHUP,  sig_handler);
+    signal(SIGWINCH, winch_handler);
+
+    handle_raw_input_loop();
+
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_term);
+
+    if (pid > 0) {
+        kill(pid, SIGHUP);
+        waitpid(pid, NULL, 0);
+    }
+
+    if (master_fd >= 0) close(master_fd);
     return 0;
 #endif
 }

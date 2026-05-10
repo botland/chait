@@ -1,6 +1,5 @@
 #include "multiagent.h"
 #include "message_queue.h"
-#include "history.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
