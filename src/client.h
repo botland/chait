@@ -23,7 +23,7 @@
 #include <signal.h>
 
 #define RUN_CHAT_CLIENT
-#define DEBUG_LEVEL 0
+#define DEBUG_LEVEL 1
 
 // Define constants
 #define SERVER_URL "http://192.168.1.16:8080/v1/chat/completions"
@@ -58,12 +58,21 @@ typedef struct {
     char *function_arguments;
 } ToolCall;
 
+typedef enum {
+    TOOL_STATUS_UNDEFINED = 0,
+    TOOL_SUCCESS,
+    TOOL_ERROR,
+    TOOL_PARTIAL,
+    TOOL_NOT_FOUND
+} ToolStatus;
+
 // Struct for tool response data
 typedef struct {
     char *tool_call_id;
     char *tool_name;
     char *tool_arguments;
     char *content;
+    ToolStatus status;
 } ToolResponseParams;
 
 typedef struct {
@@ -128,10 +137,10 @@ int stream_from_llama_server(char *json_response);
 void print_stream_advanced_markdown(const char* chunk);
 int append_string(char **buf, size_t *len, const char *text);
 void add_to_history(const char *role, const char *content);
-void set_last_tool_response_params(const char *tool_call_id, const char *tool_name, const char *content);
+void set_last_tool_response_params(const char *tool_call_id, const char *tool_name, const char *content, ToolStatus status);
 void clear_last_tool_response_params(void);
 ToolResponseParams* get_last_tool_response_params(void);
-void send_tool_response(StreamState *state, const ToolCall *tool, const char *status, const char *content);
+void send_tool_response(StreamState *state, const ToolCall *tool, ToolStatus status, const char *content);
 
 // Json
 char* extract_message_from_json(const char* json_response);

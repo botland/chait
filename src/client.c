@@ -235,13 +235,14 @@ ToolResponseParams* get_last_tool_response_params(void) {
     return &last_trp_static;
 }
 
-void set_last_tool_response_params(const char *tool_call_id, const char *tool_name, const char *content) {
+void set_last_tool_response_params(const char *tool_call_id, const char *tool_name, const char *content, ToolStatus status) {
     if (last_trp_static.tool_call_id) free(last_trp_static.tool_call_id);
     if (last_trp_static.tool_name) free(last_trp_static.tool_name);
     if (last_trp_static.content) free(last_trp_static.content);
     last_trp_static.tool_call_id = tool_call_id ? strdup(tool_call_id) : NULL;
     last_trp_static.tool_name = tool_name ? strdup(tool_name) : NULL;
     last_trp_static.content = content ? strdup(content) : NULL;
+    last_trp_static.status = status;
 }
 
 void clear_last_tool_response_params(void) {
@@ -300,9 +301,7 @@ int run_multiloop_agent(AgentContext *ctx,
 
         if (!last_response_has_tool_calls()) {
             ctx->finished = true;
-            printf("\033[32m\n[Agent finished after %d loop%s]\033[0m\n",
-                   ctx->loop_count, ctx->loop_count == 1 ? "" : "s");
-            return ctx->loop_count;
+            break;
         }
 
         trp = get_last_tool_response_params();
@@ -318,8 +317,6 @@ int run_multiloop_agent(AgentContext *ctx,
 
         if (ctx->consecutive_failures > MAX_CONSECUTIVE_FAILURES) {
             fprintf(stderr, "\033[31m[SAFETY] Agent stuck in repeated tool loop — aborting\033[0m\n");
-            clear_last_tool_response_params();
-            prune_last_n(8);  // even stronger cleanup on abort
             add_to_history("system", "[SYSTEM] Previous tool loop was aborted due to repetition. Do not retry the same tool or action.");
             break;
         }
@@ -331,8 +328,12 @@ int run_multiloop_agent(AgentContext *ctx,
         printf("\033[2m[Loop %d complete — tool response injected]\033[0m\n", ctx->loop_count);
     }
 
-    if (!ctx->finished) {
-        printf("\033[33m[Agent stopped after %d loops (max/safety)]\033[0m\n", ctx->loop_count);
+    if (!ctx->finished || (trp != NULL && trp->status != TOOL_SUCCESS)) {
+        printf("\033[33m[Agent stopped after %d loop%s]\033[0m\n", ctx->loop_count, ctx->loop_count == 1 ? "" : "s");
+        clear_last_tool_response_params();
+        prune_last_n(ctx->loop_count);
+    } else {
+        printf("\033[32m\n[Agent finished after %d loop%s]\033[0m\n", ctx->loop_count, ctx->loop_count == 1 ? "" : "s");
     }
     return ctx->loop_count;
 }
