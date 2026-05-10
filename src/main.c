@@ -94,10 +94,13 @@ int run_chat_client() {
             // Execute command
             system(input);
         } else {
-//            ask_inference_engine(input, NULL);  // No history param anymore
-//            AgentContext ctx = {0};
-//            run_multiloop_agent(&ctx, input, 12);
+#ifdef RUN_MULTI_AGENT
             orchestrator_main(input);
+#else
+//            ask_inference_engine(input, NULL);  // No history param anymore
+            AgentContext ctx = {0};
+            run_multiloop_agent(&ctx, input, 12);
+#endif
         }
 
         prune_history();  // Prune after adding user (before request)
@@ -123,10 +126,13 @@ void handle_llm_prompt(const char *input) {
     }
 
 //    llm_printf("%s\n", input);
+#ifdef RUN_MULTI_AGENT
+      orchestrator_main(input);
+#else
 //    ask_inference_engine(input, NULL);  // No history param anymore
-//    AgentContext ctx = {0};
-//    run_multiloop_agent(&ctx, input, 12);
-    orchestrator_main(input);
+    AgentContext ctx = {0};
+    run_multiloop_agent(&ctx, input, 12);
+#endif
 
     prune_history();  // Prune after adding user (before request)
 }

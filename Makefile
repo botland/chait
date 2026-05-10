@@ -15,7 +15,7 @@ AGENTS = multiagent.c message_queue.c orchestrator.c
 #        get_dependencies.c get_file_chunk.c get_file_content.c get_function_code.c \
 #        grep.c list_files.c replace_file_content.c replace_function.c scan_function.c \
 #        scan_symbol.c summarize_file.c
-TOOLS = get_file_content.c find_file_path.c save_to_file.c spawn_agent.c
+TOOLS = get_file_content.c find_file_path.c run_git_command.c save_to_file.c spawn_agent.c
 
 # Object files
 OBJ = $(addprefix $(OBJ_DIR)/,$(MAIN_SRC:.c=.o)) \

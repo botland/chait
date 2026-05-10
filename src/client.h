@@ -23,6 +23,7 @@
 #include <signal.h>
 
 #define RUN_CHAT_CLIENT
+//#define RUN_MULTI_AGENT
 #define DEBUG_LEVEL 0
 
 // Define constants
