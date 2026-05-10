@@ -186,6 +186,7 @@ void free_tool_call(ToolCall *tool);
 void free_tool_response_params(ToolResponseParams *params);
 void reset_state(StreamState *state);
 void print_stream_state(const StreamState *state, const char *label);
+void send_tool_response(StreamState *state, const ToolCall *tool, const char *status, const char *content);
 
 // Event system
 void process_events(StreamState *state);  // NEW: central executor
