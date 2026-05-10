@@ -219,7 +219,7 @@ void process_events(StreamState *state) {
     }
 }
 
-// src/client.c — FIXED MULTILOOP AGENT v5 (aggressive prune on EVERY run + safety)
+// src/client.c — FIXED MULTILOOP AGENT v6 (prune_history() + aggressive loop cleanup to kill stale tool errors)
 
 static uint32_t hash_tool_calls(const char *tool_payload) {
     uint32_t hash = 5381;
@@ -266,7 +266,8 @@ void print_last_assistant_content(void) {
 
 /**
  * run_multiloop_agent — ReAct loop (AgentContext, no globals, compiles on hybrid-tools-refactor)
- * v5: prune_last_n(8) at START of EVERY agent run + on abort to kill stale tool errors forever
+ * v6: prune_history() + prune_last_n(20) at START of EVERY agent run + larger prune on abort
+ * This kills the stale "toto.c" tool error history leak across messages
  */
 int run_multiloop_agent(AgentContext *ctx,
                         const char *initial_user_input,
@@ -275,9 +276,10 @@ int run_multiloop_agent(AgentContext *ctx,
 
     clear_last_tool_response_params();
 
-    // AGGRESSIVE RESET: prune ANY lingering failed tool cycle BEFORE building next prompt
-    // This fixes the leak you saw in the last run where "toto.c" error survived safety abort
-    prune_last_n(8);
+    // AGGRESSIVE RESET: cap history to last MAX_HISTORY_TURNS pairs AND extra prune recent tool loops
+    // BEFORE building next prompt. This fixes the leak you saw where tool errors survived safety abort
+    prune_history();
+    prune_last_n(20);
 
     memset(&ctx->tool_response, 0, sizeof(ctx->tool_response));
     ctx->loop_count = 0;
@@ -331,9 +333,11 @@ int run_multiloop_agent(AgentContext *ctx,
     if (!ctx->finished || (trp != NULL && trp->status != TOOL_SUCCESS)) {
         printf("\033[33m[Agent stopped after %d loop%s]\033[0m\n", ctx->loop_count, ctx->loop_count == 1 ? "" : "s");
         clear_last_tool_response_params();
-        prune_last_n(ctx->loop_count);
+        prune_last_n(ctx->loop_count * 3 + 4);  // remove entire failed cycle that was just added during this run
+        prune_history();  // cap total history
     } else {
         printf("\033[32m\n[Agent finished after %d loop%s]\033[0m\n", ctx->loop_count, ctx->loop_count == 1 ? "" : "s");
+        prune_history();  // cap after success too
     }
     return ctx->loop_count;
 }
