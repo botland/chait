@@ -46,21 +46,21 @@ cJSON *create_get_file_content_tool(void) {
 // ====================== EXECUTION ======================
 void execute_get_file_content(StreamState *state, const ToolCall *tool) {
     if (!tool || !tool->function_arguments) {
-        send_tool_response(state, "error", "No arguments provided");
+        send_tool_response(state, tool, TOOL_ERROR, "No arguments provided");
         return;
     }
 
     // Simple argument parsing (arguments is JSON string)
     cJSON *args = cJSON_Parse(tool->function_arguments);
     if (!args) {
-        send_tool_response(state, "error", "Failed to parse arguments");
+        send_tool_response(state, tool, TOOL_ERROR, "Failed to parse arguments");
         return;
     }
 
     cJSON *path_item = cJSON_GetObjectItem(args, "path");
     if (!path_item || !path_item->valuestring) {
         cJSON_Delete(args);
-        send_tool_response(state, "error", "No path provided");
+        send_tool_response(state, tool, TOOL_ERROR, "No path provided");
         return;
     }
 
@@ -68,14 +68,14 @@ void execute_get_file_content(StreamState *state, const ToolCall *tool) {
 
     if (access(path, R_OK) != 0) {
         cJSON_Delete(args);
-        send_tool_response(state, "error", "Error opening file or file not found");
+        send_tool_response(state, tool, TOOL_ERROR, "Error opening file or file not found");
         return;
     }
 
     FILE *f = fopen(path, "r");
     if (!f) {
         cJSON_Delete(args);
-        send_tool_response(state, "error", "Failed to open file");
+        send_tool_response(state, tool, TOOL_ERROR, "Failed to open file");
         return;
     }
 
@@ -89,7 +89,7 @@ void execute_get_file_content(StreamState *state, const ToolCall *tool) {
     fclose(f);
     cJSON_Delete(args);
 
-    send_tool_response(state, "success", content);
+    send_tool_response(state, tool, TOOL_SUCCESS, content);
     free(content);
 }
 

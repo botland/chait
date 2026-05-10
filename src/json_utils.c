@@ -191,6 +191,7 @@ void process_json_to_events(const char *json_str, StreamState *state) {
                 Event ev = {
                     .type = EVENT_TOOL_CALL,
                     .tool = {
+                        .id = tool->id ? strdup(tool->id) : NULL,
                         .name = strdup(tool->function_name),
                         .arguments = tool->function_arguments ? strdup(tool->function_arguments) : NULL
                     }

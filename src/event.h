@@ -8,6 +8,7 @@ typedef enum {
 } EventType;
 
 typedef struct {
+    char *id;              // ← NEW for ReAct tool-call ID propagation
     char *name;
     char *arguments;
 } ToolCallEvent;

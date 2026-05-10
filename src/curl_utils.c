@@ -56,6 +56,9 @@ size_t WriteCallbackStream(void *contents, size_t size, size_t nmemb, void *user
 
 #if DEBUG_LEVEL > 1
     printf("WriteCallbackStream: received %zu bytes (total buffered: %zu)\n", realsize, stream_buf_len + realsize);
+#if DEBUG_LEVEL > 5
+    printf("%s\n", contents);
+#endif
 #endif
 
     // Append data

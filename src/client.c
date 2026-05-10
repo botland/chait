@@ -1,6 +1,8 @@
 #include "client.h"
 #include "event.h"
 
+#define MAX_CONSECUTIVE_FAILURES 5
+
 bool enable_stream = true;
 bool enable_tools = false;
 char *system_prompt = NULL;
@@ -29,7 +31,7 @@ void build_assistant_tool_call(cJSON *messages, ToolResponseParams *params) {
 
     cJSON *function = cJSON_CreateObject();
     cJSON_AddStringToObject(function, "name", params->tool_name);
-    cJSON_AddStringToObject(function, "arguments", params->tool_arguments);
+    cJSON_AddStringToObject(function, "arguments", params->tool_arguments ? params->tool_arguments : "{}");
     cJSON_AddItemToObject(tool_call, "function", function);
 
     cJSON_AddItemToArray(tool_calls, tool_call);
@@ -92,8 +94,9 @@ int ask_inference_engine(char *user_input, ToolResponseParams *trp) {
         build_assistant_tool_call(messages, trp);
         build_tool_response(messages, trp);
     }
-    cJSON_AddItemToObject(root, "messages", messages);
+    clear_last_tool_response_params();
 
+    cJSON_AddItemToObject(root, "messages", messages);
     cJSON_AddNumberToObject(root, "temperature", 0.1);
     cJSON_AddNumberToObject(root, "max_tokens", 8192);
     cJSON_AddStringToObject(root, "model", "lexi8b");
@@ -199,8 +202,10 @@ void process_events(StreamState *state) {
         case EVENT_TOOL_CALL:
             {
                 ToolCall tc = {
-                    .function_name = ev.tool.name,
-                    .function_arguments = ev.tool.arguments
+                   .id = ev.tool.id,
+                   .type = NULL,
+                   .function_name = ev.tool.name,
+                   .function_arguments = ev.tool.arguments
                 };
                 execute_tool(state, &tc);
                 free_event(&ev);
@@ -214,7 +219,7 @@ void process_events(StreamState *state) {
     }
 }
 
-// src/client.c — FIXED MULTILOOP AGENT v4 (compiles cleanly)
+// src/client.c — FIXED MULTILOOP AGENT v6 (prune_history() + aggressive loop cleanup to kill stale tool errors)
 
 static uint32_t hash_tool_calls(const char *tool_payload) {
     uint32_t hash = 5381;
@@ -228,6 +233,23 @@ static ToolResponseParams last_trp_static = {0};
 
 ToolResponseParams* get_last_tool_response_params(void) {
     return &last_trp_static;
+}
+
+void set_last_tool_response_params(const char *tool_call_id, const char *tool_name, const char *content, ToolStatus status) {
+    if (last_trp_static.tool_call_id) free(last_trp_static.tool_call_id);
+    if (last_trp_static.tool_name) free(last_trp_static.tool_name);
+    if (last_trp_static.content) free(last_trp_static.content);
+    last_trp_static.tool_call_id = tool_call_id ? strdup(tool_call_id) : NULL;
+    last_trp_static.tool_name = tool_name ? strdup(tool_name) : NULL;
+    last_trp_static.content = content ? strdup(content) : NULL;
+    last_trp_static.status = status;
+}
+
+void clear_last_tool_response_params(void) {
+    if (last_trp_static.tool_call_id) free(last_trp_static.tool_call_id);
+    if (last_trp_static.tool_name) free(last_trp_static.tool_name);
+    if (last_trp_static.content) free(last_trp_static.content);
+    memset(&last_trp_static, 0, sizeof(last_trp_static));
 }
 
 bool last_response_has_tool_calls(void) {
@@ -244,11 +266,20 @@ void print_last_assistant_content(void) {
 
 /**
  * run_multiloop_agent — ReAct loop (AgentContext, no globals, compiles on hybrid-tools-refactor)
+ * v6: prune_history() + prune_last_n(20) at START of EVERY agent run + larger prune on abort
+ * This kills the stale "toto.c" tool error history leak across messages
  */
 int run_multiloop_agent(AgentContext *ctx,
                         const char *initial_user_input,
                         int max_loops) {
     if (!ctx) return -1;
+
+    clear_last_tool_response_params();
+
+    // AGGRESSIVE RESET: cap history to last MAX_HISTORY_TURNS pairs AND extra prune recent tool loops
+    // BEFORE building next prompt. This fixes the leak you saw where tool errors survived safety abort
+    prune_history();
+    prune_last_n(20);
 
     memset(&ctx->tool_response, 0, sizeof(ctx->tool_response));
     ctx->loop_count = 0;
@@ -272,9 +303,7 @@ int run_multiloop_agent(AgentContext *ctx,
 
         if (!last_response_has_tool_calls()) {
             ctx->finished = true;
-            printf("\033[32m\n[Agent finished after %d loop%s]\033[0m\n",
-                   ctx->loop_count, ctx->loop_count == 1 ? "" : "s");
-            return ctx->loop_count;
+            break;
         }
 
         trp = get_last_tool_response_params();
@@ -288,8 +317,9 @@ int run_multiloop_agent(AgentContext *ctx,
         }
         ctx->last_tool_hash = tool_hash;
 
-        if (ctx->consecutive_failures >= 3) {
+        if (ctx->consecutive_failures > MAX_CONSECUTIVE_FAILURES) {
             fprintf(stderr, "\033[31m[SAFETY] Agent stuck in repeated tool loop — aborting\033[0m\n");
+            add_to_history("system", "[SYSTEM] Previous tool loop was aborted due to repetition. Do not retry the same tool or action.");
             break;
         }
 
@@ -300,8 +330,14 @@ int run_multiloop_agent(AgentContext *ctx,
         printf("\033[2m[Loop %d complete — tool response injected]\033[0m\n", ctx->loop_count);
     }
 
-    if (!ctx->finished) {
-        printf("\033[33m[Agent stopped after %d loops (max/safety)]\033[0m\n", ctx->loop_count);
+    if (!ctx->finished || (trp != NULL && trp->status != TOOL_SUCCESS)) {
+        printf("\033[33m[Agent stopped after %d loop%s]\033[0m\n", ctx->loop_count, ctx->loop_count == 1 ? "" : "s");
+        clear_last_tool_response_params();
+        prune_last_n(ctx->loop_count * 3 + 4);  // remove entire failed cycle that was just added during this run
+        prune_history();  // cap total history
+    } else {
+        printf("\033[32m\n[Agent finished after %d loop%s]\033[0m\n", ctx->loop_count, ctx->loop_count == 1 ? "" : "s");
+        prune_history();  // cap after success too
     }
     return ctx->loop_count;
 }
