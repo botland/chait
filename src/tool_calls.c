@@ -16,9 +16,9 @@ const char* get_status(ToolStatus status) {
 }
 
 void send_tool_response(StreamState *state, const ToolCall *tool, ToolStatus status, const char *content) {
-//#if DEBUG_LEVEL > 0
-    printf("[TOOL RESPONSE] %s: %s\n", get_status(status), content ? content : "");
-//#endif
+    if (debug_level > 0) {
+        printf("[TOOL RESPONSE] %s: %s\n", get_status(status), content ? content : "");
+    }
     if (tool) {
         set_last_tool_response_params(tool, content, status);
     }
@@ -27,8 +27,8 @@ void send_tool_response(StreamState *state, const ToolCall *tool, ToolStatus sta
 
 void reset_state(StreamState *state) {
     if (state) {
-        state->content[0] = '\0';
-        state->content_len = 0;
+//        state->content[0] = '\0';
+//        state->content_len = 0;
         state->pending_tool_calls = 0;
         state->tool_calls_size = 0;
     }
@@ -60,9 +60,9 @@ void execute_tool(StreamState *state, const ToolCall *tool) {
         return;
     }
 
-//#if DEBUG_LEVEL > 0
-    printf("[TOOL CALL] Executing: %s\n", tool->function_name);
-//#endif
+    if (debug_level > 0) {
+        printf("[TOOL CALL] Executing: %s\n", tool->function_name);
+    }
 
     ToolHandler *handler = find_tool_handler(tool->function_name);
     if (handler && handler->execute) {

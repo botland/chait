@@ -3,6 +3,7 @@
 
 #define MAX_CONSECUTIVE_FAILURES 5
 
+ushort debug_level = 0;
 bool enable_agents = false;
 bool enable_stream = true;
 bool enable_tools = false;
@@ -119,9 +120,10 @@ int ask_inference_engine(char *user_input, ToolResponseParams *trp) {
     }
 
     char *json_request = cJSON_PrintUnformatted(root);
-#if DEBUG_LEVEL > 0
-    printf("payload: %s\n", json_request);
-#endif
+    if (debug_level > 1) {
+        printf("request payload: %s\n", json_request);
+    }
+
     cJSON_Delete(root);
     if (json_request == NULL) {
         fprintf(stderr, "Failed to create JSON request\n");
@@ -131,8 +133,8 @@ int ask_inference_engine(char *user_input, ToolResponseParams *trp) {
     }
 
     StreamState state = {0};
-    state.content[0] = '\0';  // Init accumulated content
-    state.content_len = 0;
+//    state.content[0] = '\0';  // Init accumulated content
+//    state.content_len = 0;
     state.input = user_input;
     init_event_queue(&state.queue);
 
@@ -158,14 +160,20 @@ int ask_inference_engine(char *user_input, ToolResponseParams *trp) {
         return 1;
     }
 
-    if (state.nonstream_buf_len > 0) {
-        add_to_history("assistant", state.nonstream_buffer);
+    if (state.content.length > 0) {
+        if (debug_level > 1) {
+            printf("response message: %s\n", state.content.content);
+        }
+//        char *content = extract_message_from_json(state.content_buffer);
+        add_to_history("assistant", state.content.content);
+        free(state.content.content);
+        state.content.length = 0;
     }
 
     if (!do_stream) {
-#if DEBUG_LEVEL > 0
-        printf("processing non-stream content\n");
-#endif
+        if (debug_level > 2) {
+            printf("[JSON] processing non-stream content\n");
+        }
         process_json_to_events(state.nonstream_buffer, &state);
     }
 
@@ -255,9 +263,7 @@ bool last_response_has_tool_calls(void) {
     return (last_trp_static.tool_name != NULL);
 }
 
-int run_multiloop_agent(AgentContext *ctx,
-                        const char *initial_user_input,
-                        int max_loops) {
+int run_multiloop_agent(AgentContext *ctx, const char *initial_user_input, int max_loops) {
     if (!ctx) return -1;
 
     clear_last_tool_response_params();

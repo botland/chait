@@ -15,8 +15,11 @@ void add_to_history(const char *role, const char *content) {
         }
     }
     chat_history[history_size].role = strdup(role);
-    chat_history[history_size].content = content ? strdup(content) : "";
+    chat_history[history_size].content = content ? strdup(content) : NULL;
     history_size++;
+    if (debug_level > 5) {
+        printf("add: history size: %d\n", history_size);
+    }
 }
 
 // Prune history to last N turns (user + assistant pairs)
@@ -31,6 +34,9 @@ void prune_history() {
         memmove(chat_history, chat_history + shift, max_entries * sizeof(Message));
         history_size = max_entries;
     }
+    if (debug_level > 5) {
+        printf("prune: history size: %d\n", history_size);
+    }
 }
 
 // Remove the last N messages (for loop abort cleanup)
@@ -42,13 +48,16 @@ void prune_last_n(int n) {
         if (chat_history[i].content) free(chat_history[i].content);
     }
     history_size -= n;
+    if (debug_level > 5) {
+        printf("prune_last_n %d: history size: %d\n", n, history_size);
+    }
 }
 
 // Free history at cleanup
 void free_history() {
     for (int i = 0; i < history_size; i++) {
-        free(chat_history[i].role);
-        free(chat_history[i].content);
+        if (chat_history[i].role) free(chat_history[i].role);
+        if (chat_history[i].content) free(chat_history[i].content);
     }
     free(chat_history);
     chat_history = NULL;

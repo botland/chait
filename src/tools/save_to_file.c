@@ -28,8 +28,7 @@ cJSON *create_save_to_file_tool(void) {
     // content
     cJSON *p2 = cJSON_CreateObject();
     cJSON_AddStringToObject(p2, "type", "string");
-    cJSON_AddStringToObject(p2, "description", 
-        "The full text content to write to the file (usually the refactored or newly generated code).");
+    cJSON_AddStringToObject(p2, "description", "The raw text content to write to the file.");
     cJSON_AddItemToObject(props, "content", p2);
 
     cJSON_AddItemToObject(params, "properties", props);

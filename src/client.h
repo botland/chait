@@ -23,13 +23,11 @@
 #include <signal.h>
 
 #define RUN_CHAT_CLIENT
-//#define RUN_MULTI_AGENT
-#define DEBUG_LEVEL 0
 
 // Define constants
 #define SERVER_URL "http://192.168.1.16:8080/v1/chat/completions"
 #define BUFFER_SIZE 8192
-#define MAX_HISTORY_TURNS 10  // Limit to last 3 user-assistant pairs
+#define MAX_HISTORY_TURNS 10  // Limit to last 10 user-assistant pairs
 #define MAX_HISTORY_SIZE 4096
 #define MAX_REQUEST_SIZE 8192
 #define MAX_RESPONSE_SIZE 8192
@@ -50,6 +48,11 @@ typedef struct {
     char *role;
     char *content;
 } Message;
+
+typedef struct {
+    char *content;
+    size_t length;
+} Buffer;
 
 // Struct for tool call data
 typedef struct {
@@ -95,8 +98,9 @@ typedef struct {
     int tool_calls_capacity;
     int tool_calls_size;
     int tool_call_started;  // From prior fixes
-    char content[BUFFER_SIZE];  // Accumulated assistant content (adjust size if needed)
-    size_t content_len;
+//    char content[BUFFER_SIZE];  // Accumulated assistant content (adjust size if needed)
+//    size_t content_len;
+    Buffer content;
     int pending_tool_calls;
     char *input;
     char *nonstream_buffer;
@@ -119,6 +123,7 @@ extern Message *chat_history;
 extern int history_size;
 extern int master_fd;
 
+extern ushort debug_level;
 extern bool enable_agents;
 extern bool enable_stream;
 extern bool enable_tools;
@@ -199,7 +204,7 @@ void print_stream_state(const StreamState *state, const char *label);
 void send_tool_response(StreamState *state, const ToolCall *tool, ToolStatus status, const char *content);
 
 // Event system
-void process_events(StreamState *state);  // NEW: central executor
+void process_events(StreamState *state);
 
 // Socket
 int create_unix_socket_server();
@@ -221,5 +226,6 @@ int is_command(const char *input);
 
 // Helpers
 const char* format(const char* format, ...);
+size_t realloc_buffer(Buffer *buffer, char *added_content, size_t added_len);
 
 #endif // CLIENT_H
