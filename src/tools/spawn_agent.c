@@ -40,13 +40,13 @@ cJSON *create_spawn_agent_tool(void) {
 // ====================== EXECUTION ======================
 void execute_spawn_agent(StreamState *state, const ToolCall *tool) {
     if (!tool || !tool->function_arguments) {
-        send_tool_response(state, tool, "error", "No arguments provided");
+        send_tool_response(state, tool, TOOL_ERROR, "No arguments provided");
         return;
     }
 
     cJSON *args = cJSON_Parse(tool->function_arguments);
     if (!args) {
-        send_tool_response(state, tool, "error", "Failed to parse arguments");
+        send_tool_response(state, tool, TOOL_ERROR, "Failed to parse arguments");
         return;
     }
 
@@ -54,7 +54,7 @@ void execute_spawn_agent(StreamState *state, const ToolCall *tool) {
     cJSON *prompt_item = cJSON_GetObjectItem(args, "system_prompt");
     if (!name_item || !name_item->valuestring || !prompt_item || !prompt_item->valuestring) {
         cJSON_Delete(args);
-        send_tool_response(state, tool, "error", "Both 'name' and 'system_prompt' are required");
+        send_tool_response(state, tool, TOOL_ERROR, "Both 'name' and 'system_prompt' are required");
         return;
     }
 
@@ -65,9 +65,9 @@ void execute_spawn_agent(StreamState *state, const ToolCall *tool) {
     if (agent) {
         char success_msg[256];
         snprintf(success_msg, sizeof(success_msg), "Successfully spawned agent '%s' (pthread started, ready for messages via queue)", name);
-        send_tool_response(state, tool, "success", success_msg);
+        send_tool_response(state, tool, TOOL_SUCCESS, success_msg);
     } else {
-        send_tool_response(state, tool, "error", "Failed to spawn agent (malloc/pthread failed)");
+        send_tool_response(state, tool, TOOL_ERROR, "Failed to spawn agent (malloc/pthread failed)");
     }
 
     cJSON_Delete(args);

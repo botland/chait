@@ -9,13 +9,13 @@ BUILD_DIR = build
 OBJ_DIR = $(BUILD_DIR)/obj
 
 # Source files
-MAIN_SRC = main.c client.c curl_utils.c json_utils.c markdown.c tool_calls.c history.c command.c socket.c registry.c event.c
+MAIN_SRC = main.c client.c curl_utils.c json_utils.c markdown.c tool_calls.c history.c command.c socket.c registry.c event.c helpers.c
 AGENTS = multiagent.c message_queue.c orchestrator.c
 #TOOLS = apply_patch.c find_callees.c find_callers.c find_file_path.c \
 #        get_dependencies.c get_file_chunk.c get_file_content.c get_function_code.c \
 #        grep.c list_files.c replace_file_content.c replace_function.c scan_function.c \
 #        scan_symbol.c summarize_file.c
-TOOLS = get_file_content.c find_file_path.c save_to_file.c spawn_agent.c
+TOOLS = get_file_content.c find_file_path.c run_git_command.c save_to_file.c spawn_agent.c
 
 # Object files
 OBJ = $(addprefix $(OBJ_DIR)/,$(MAIN_SRC:.c=.o)) \

@@ -1,6 +1,7 @@
 #define _XOPEN_SOURCE 700
 
 #include "client.h"
+#include "multiagent/multiagent.h"
 
 #include <fcntl.h>
 #include <termios.h>
@@ -93,9 +94,13 @@ int run_chat_client() {
             // Execute command
             system(input);
         } else {
-//            ask_inference_engine(input, NULL);  // No history param anymore
-            AgentContext ctx = {0};
-            run_multiloop_agent(&ctx, input, 12);
+            if (enable_agents) {
+                orchestrator_main(input);
+            } else {
+//                ask_inference_engine(input, NULL);  // No history param anymore
+                AgentContext ctx = {0};
+                run_multiloop_agent(&ctx, input, 12);
+            }
         }
 
         prune_history();  // Prune after adding user (before request)
@@ -121,9 +126,13 @@ void handle_llm_prompt(const char *input) {
     }
 
 //    llm_printf("%s\n", input);
-//    ask_inference_engine(input, NULL);  // No history param anymore
-    AgentContext ctx = {0};
-    run_multiloop_agent(&ctx, input, 12);
+    if (enable_agents) {
+        orchestrator_main(input);
+    } else {
+//        ask_inference_engine(input, NULL);  // No history param anymore
+        AgentContext ctx = {0};
+        run_multiloop_agent(&ctx, input, 12);
+    }
 
     prune_history();  // Prune after adding user (before request)
 }

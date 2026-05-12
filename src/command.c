@@ -2,31 +2,65 @@
 
 #include <pwd.h>     // For getpwnam, getpwuid
 
-int copy_after_first_space(const char *input, char **output) {
+int get_the_string_after_first_space(const char *input, char **output) {
+    if (!input || !output) return 0;
+
     const char *space = strchr(input, ' ');
-    if (!space || !*(space + 1)) return 0;
-    size_t len = strlen(space + 1);
-    *output = realloc(*output, len + 1);
-    if (!*output) return 0;
-    strcpy(*output, space + 1);
+    if (!space || !*(space + 1)) {
+        free(*output);
+        *output = NULL;
+        return 0;
+    }
+
+    const char *text = space + 1;
+    size_t len = strlen(text);
+
+    char *new_mem = realloc(*output, len + 1);
+    if (!new_mem) return 0;
+
+    *output = new_mem;
+    strcpy(*output, text);
     return 1;
+}
+
+int get_the_int_after_first_space(const char *input) {
+    if (!input) return 0;
+
+    const char *space = strchr(input, ' ');
+    if (!space || !*(space + 1))
+        return 0;
+    return atoi(space + 1);
 }
 
 int is_command_local(const char *input) {
     if (!strcmp(input, "help") || !strcmp(input, "h")) {
        printf("h or help          : help\n");
+       printf("dl <level>         : debug level\n");
        printf("rh                 : reset history\n");
        printf("sp <system_prompt> : set system prompt\n");
+       printf("ta                 : toggle agents\n");
        printf("ts                 : toggle stream mode\n");
        printf("tt                 : toggle tools\n");
        printf("q or quit          : quit\n");
        return 1;
-/*    } else if (strcmp(input, "sp")) {
+    } else if (!strncmp(input, "dl ", 3)) {
+        debug_level = get_the_int_after_first_space(input);
+        printf("Debug level set to %d\n", debug_level);
+        return 1;
+    } else if (!strcmp(input, "rh")) {
+        free_history();
+        printf("Conversation history reset.\n");
+        return 1;
+    } else if (!strcmp(input, "sp")) {
         printf("System prompt is: %s\n", system_prompt);
-        return 1;*/
+        return 1;
     } else if (!strncmp(input, "sp ", 3)) {
-        copy_after_first_space(input, &system_prompt);
+        get_the_string_after_first_space(input, &system_prompt);
         printf("System prompt is: %s\n", system_prompt);
+        return 1;
+    } else if (!strcmp(input, "ta")) {
+        enable_agents = !enable_agents;
+        printf("Agents are %s\n", enable_agents ? "enabled" : "disabled");
         return 1;
     } else if (!strcmp(input, "ts")) {
         enable_stream = !enable_stream;
@@ -35,10 +69,6 @@ int is_command_local(const char *input) {
     } else if (!strcmp(input, "tt")) {
         enable_tools = !enable_tools;
         printf("Tools are %s\n", enable_tools ? "enabled" : "disabled");
-        return 1;
-    } else if (!strcmp(input, "rh")) {
-        free_history();
-        printf("Conversation history reset.\n");
         return 1;
     } else if (!strcmp(input, "quit") || !strcmp(input, "q")) {
         return -1;

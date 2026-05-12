@@ -25,11 +25,10 @@ size_t WriteCallbackNonStream(void *contents, size_t size, size_t nmemb, void *u
 
     if (realsize == 0) return 0;
 
-    // Dynamic realloc for buffer growth
     char *new_buffer = realloc(state->nonstream_buffer, state->nonstream_buf_len + realsize + 1);
     if (!new_buffer) {
         fprintf(stderr, "Memory allocation failed in WriteCallbackNonStream\n");
-        return 0;  // Error — curl will abort
+        return 0;
     }
     state->nonstream_buffer = new_buffer;
 
@@ -37,18 +36,18 @@ size_t WriteCallbackNonStream(void *contents, size_t size, size_t nmemb, void *u
     state->nonstream_buf_len += realsize;
     state->nonstream_buffer[state->nonstream_buf_len] = '\0';
 
-#if DEBUG_LEVEL > 2
-    printf("NonStream: appended %zu bytes (total %zu)\n", realsize, state->nonstream_buf_len);
-#endif
+    if (debug_level > 2) {
+        printf("NonStream: appended %zu bytes (total %zu)\n", realsize, state->nonstream_buf_len);
+    }
 
     return realsize;
 }
 
 // Static or per-state buffer for partial chunks (SSE can span multiple callbacks)
-static char stream_buffer[65536] = {0};
-static size_t stream_buf_len = 0;
+//static char stream_buffer[65536] = {0};
+//static size_t stream_buf_len = 0;
 
-size_t WriteCallbackStream(void *contents, size_t size, size_t nmemb, void *userp) {
+/*size_t WriteCallbackStream(void *contents, size_t size, size_t nmemb, void *userp) {
     size_t realsize = size * nmemb;
     StreamState *state = (StreamState *)userp;
 
@@ -124,6 +123,121 @@ size_t WriteCallbackStream(void *contents, size_t size, size_t nmemb, void *user
     }
     stream_buf_len = remaining;
     stream_buffer[stream_buf_len] = '\0';
+
+    return realsize;
+}*/
+
+
+size_t WriteCallbackStream(void *contents, size_t size, size_t nmemb, void *userp) {
+    size_t realsize = size * nmemb;
+    StreamState *state = (StreamState *)userp;
+    if (realsize == 0 || !contents || !state) {
+        return 0;
+    }
+
+    if (debug_level > 2) {
+        printf("WriteCallbackStream: received %zu bytes\n", realsize);
+    }
+
+    // Prevent overflow
+    if (state->stream_buf_len + realsize >= sizeof(state->stream_buffer) - 1) {
+        fprintf(stderr, "[WARN] stream buffer overflow, resetting\n");
+        state->stream_buf_len = 0;
+    }
+
+    // Append incoming bytes
+    memcpy(state->stream_buffer + state->stream_buf_len, contents, realsize);
+    state->stream_buf_len += realsize;
+    state->stream_buffer[state->stream_buf_len] = '\0';
+
+    char *search_start = state->stream_buffer;
+
+    while (1) {
+
+        // SSE event separator = blank line ONLY
+        char *event_end = strstr(search_start, "\n\n");
+        size_t sep_len = 2;
+
+        char *crlf_end = strstr(search_start, "\r\n\r\n");
+        if (crlf_end && (!event_end || crlf_end < event_end)) {
+            event_end = crlf_end;
+            sep_len = 4;
+        }
+
+        // No complete event yet
+        if (!event_end) {
+            break;
+        }
+
+        // Isolate one full SSE event
+        *event_end = '\0';
+
+        if (debug_level > 3) {
+            printf("[SSE EVENT]\n%s\n", search_start);
+        }
+
+        // SSE events may contain multiple lines
+        char *line = search_start;
+        while (line && *line) {
+
+            char *next_line = strchr(line, '\n');
+            if (next_line) {
+                *next_line = '\0';
+
+                // trim CR
+                size_t len = strlen(line);
+                if (len > 0 && line[len - 1] == '\r') {
+                    line[len - 1] = '\0';
+                }
+            }
+
+            // Process ONLY data: lines
+            if (strncmp(line, "data:", 5) == 0) {
+                const char *json_str = line + 5;
+                while (*json_str == ' ' || *json_str == '\t') {
+                    json_str++;
+                }
+
+                if (strcmp(json_str, "[DONE]") == 0) {
+                    if (debug_level > 3) {
+                        printf("[SSE DONE]\n");
+                    }
+                    Event ev_done = {
+                        .type = EVENT_DONE
+                    };
+                    push_event(&state->queue, ev_done);
+
+                } else if (*json_str != '\0') {
+                    if (debug_level > 4) {
+                        printf("[JSON CHUNK] %s\n", json_str);
+                    }
+                    process_json_to_events(json_str, state);
+                }
+            }
+
+            if (!next_line) {
+                break;
+            }
+
+            line = next_line + 1;
+        }
+
+        // Move after separator
+        search_start = event_end + sep_len;
+    }
+
+    // Preserve incomplete tail
+    size_t remaining = state->stream_buffer + state->stream_buf_len - search_start;
+
+    if (remaining > 0 && search_start != state->stream_buffer) {
+        memmove(state->stream_buffer, search_start, remaining);
+    }
+
+    state->stream_buf_len = remaining;
+    state->stream_buffer[state->stream_buf_len] = '\0';
+
+    // Process queued events AFTER full parsing
+    process_events(state);
 
     return realsize;
 }
