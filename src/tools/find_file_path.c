@@ -79,11 +79,10 @@ static void search_files(const char *dir_path, const char *target_name, cJSON *r
     closedir(dir);
 }
 
-void execute_find_file_path(StreamState *state, const ToolCall *tool) {
+ToolResponseParams *execute_find_file_path(StreamState *state, const ToolCall *tool) {
     cJSON *args_root = cJSON_Parse(tool->function_arguments);
     if (args_root == NULL) {
-        fprintf(stderr, "Error parsing tool arguments\n");
-        return;
+        return create_tool_response_params(tool, TOOL_ERROR, "Error parsing tool arguments");
     }
 
     cJSON *file_name_item = cJSON_GetObjectItemCaseSensitive(args_root, "file_name");
@@ -91,16 +90,15 @@ void execute_find_file_path(StreamState *state, const ToolCall *tool) {
     cJSON *max_results_item = cJSON_GetObjectItemCaseSensitive(args_root, "max_results");
 
     if (!cJSON_IsString(file_name_item)) {
-        fprintf(stderr, "Invalid arguments for find_file_path\n");
         cJSON_Delete(args_root);
-        return;
+        return create_tool_response_params(tool, TOOL_ERROR, "Invalid arguments for find_file_path");
     }
 
     const char *file_name = file_name_item->valuestring;
     const char *root_path = root_path_item && cJSON_IsString(root_path_item) ? root_path_item->valuestring : ".";
     int max_results = max_results_item && cJSON_IsNumber(max_results_item) ? (int)max_results_item->valuedouble : 10;
 
-    printf("Tool call detected: %s with arguments %s\n", tool->function_name, tool->function_arguments ? tool->function_arguments : "");
+//    printf("Tool call detected: %s with arguments %s\n", tool->function_name, tool->function_arguments ? tool->function_arguments : "");
 
     cJSON *results_array = cJSON_CreateArray();
     int count = 0;
@@ -108,15 +106,15 @@ void execute_find_file_path(StreamState *state, const ToolCall *tool) {
 
     char *content = cJSON_PrintUnformatted(results_array);
     cJSON_Delete(results_array);
-
     cJSON_Delete(args_root);
 
     if (!count) {
-        send_tool_response(state, tool, TOOL_ERROR, "No matching files found.");
-    } else {
-        send_tool_response(state, tool, TOOL_SUCCESS, content);
+        return create_tool_response_params(tool, TOOL_ERROR, "No matching files found");
     }
-    free(content); 
+
+    ToolResponseParams *trp = create_tool_response_params(tool, TOOL_SUCCESS, content);
+    free(content);
+    return trp;
 }
 
 // ====================== HANDLER ======================
