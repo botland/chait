@@ -44,39 +44,34 @@ cJSON *create_get_file_content_tool(void) {
 }
 
 // ====================== EXECUTION ======================
-void execute_get_file_content(StreamState *state, const ToolCall *tool) {
+ToolResponseParams *execute_get_file_content(StreamState *state, const ToolCall *tool) {
     if (!tool || !tool->function_arguments) {
-        send_tool_response(state, tool, TOOL_ERROR, "No arguments provided");
-        return;
+        return create_tool_response_params(tool, TOOL_ERROR, "No arguments provided");
     }
 
     // Simple argument parsing (arguments is JSON string)
     cJSON *args = cJSON_Parse(tool->function_arguments);
     if (!args) {
-        send_tool_response(state, tool, TOOL_ERROR, "Failed to parse arguments");
-        return;
+        return create_tool_response_params(tool, TOOL_ERROR, "Failed to parse arguments");
     }
 
     cJSON *path_item = cJSON_GetObjectItem(args, "path");
     if (!path_item || !path_item->valuestring) {
         cJSON_Delete(args);
-        send_tool_response(state, tool, TOOL_ERROR, "No path provided");
-        return;
+        return create_tool_response_params(tool, TOOL_ERROR, "No path provided");
     }
 
     const char *path = path_item->valuestring;
 
     if (access(path, R_OK) != 0) {
         cJSON_Delete(args);
-        send_tool_response(state, tool, TOOL_ERROR, "Error opening file or file not found");
-        return;
+        return create_tool_response_params(tool, TOOL_ERROR, "Error opening file or file not found");
     }
 
     FILE *f = fopen(path, "r");
     if (!f) {
         cJSON_Delete(args);
-        send_tool_response(state, tool, TOOL_ERROR, "Failed to open file");
-        return;
+        return create_tool_response_params(tool, TOOL_ERROR, "Failed to open file");
     }
 
     fseek(f, 0, SEEK_END);
@@ -89,8 +84,9 @@ void execute_get_file_content(StreamState *state, const ToolCall *tool) {
     fclose(f);
     cJSON_Delete(args);
 
-    send_tool_response(state, tool, TOOL_SUCCESS, content);
+    ToolResponseParams *trp = create_tool_response_params(tool, TOOL_SUCCESS, content);
     free(content);
+    return trp;
 }
 
 // ====================== HANDLER ======================

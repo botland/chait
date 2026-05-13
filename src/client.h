@@ -43,16 +43,16 @@
 #define SOCKET_PATH "/tmp/llm.sock"
 #define SOCKET_BACKLOG 5
 
+typedef struct {
+    char *content;
+    size_t length;
+} Buffer;
+
 // Simple message struct for history
 typedef struct {
     char *role;
     char *content;
 } Message;
-
-typedef struct {
-    char *content;
-    size_t length;
-} Buffer;
 
 // Struct for tool call data
 typedef struct {
@@ -111,7 +111,7 @@ typedef struct {
 typedef struct ToolHandler {
     const char *name;
     cJSON *(*create_definition)(void);
-    void   (*execute)(StreamState *state, const ToolCall *tool);
+    ToolResponseParams *(*execute)(StreamState *state, const ToolCall *tool);
 } ToolHandler;
 
 void register_all_tools(void);
@@ -137,16 +137,13 @@ size_t WriteCallbackNonStream(void *contents, size_t size, size_t nmemb, void *u
 size_t WriteCallbackStream(void *contents, size_t size, size_t nmemb, void *userp);
 
 // Client
-int ask_inference_engine(char *user_input, ToolResponseParams *trp);
+int ask_inference_engine(char *user_input, ToolResponseParams **trp);
 int run_multiloop_agent(AgentContext *ctx, const char *initial_user_input, int max_loops);
 int run_chat_client();
 int stream_from_llama_server(char *json_response);
 void print_stream_advanced_markdown(const char* chunk);
 int append_string(char **buf, size_t *len, const char *text);
 void add_to_history(const char *role, const char *content);
-void set_last_tool_response_params(const ToolCall *tool, const char *content, ToolStatus status);
-void clear_last_tool_response_params(void);
-ToolResponseParams* get_last_tool_response_params(void);
 
 // Json
 char* extract_message_from_json(const char* json_response);
@@ -156,55 +153,16 @@ void process_json_complete(const char *json_str, StreamState *state);
 void process_json_to_events(const char *json_str, StreamState *state);  // NEW: pure event emitter
 bool check_json_response(const char *json_string);
 
-// Tool payloads
-cJSON *create_get_function_code_tool();
-cJSON *create_scan_function_tool();
-cJSON *create_apply_patch_tool();
-cJSON *create_find_callees_tool();
-cJSON *create_find_callers_tool();
-cJSON *create_find_file_path_tool(void);
-cJSON *create_get_dependencies_tool();
-cJSON *create_get_file_chunk_tool();
-cJSON *create_get_file_content_tool(void);
-cJSON *create_get_function_code_tool();
-cJSON *create_grep_tool();
-cJSON *create_list_files_tool();
-cJSON *create_replace_file_content_tool(void);
-cJSON *create_replace_function_tool();
-cJSON *create_save_to_file_tool(void);
-cJSON *create_scan_function_tool();
-cJSON *create_scan_symbol_tool();
-cJSON *create_summarize_file_tool();
-
-// Tool functions
-void execute_apply_patch(StreamState *state, const ToolCall *tool);
-void execute_find_callees(StreamState *state, const ToolCall *tool);
-void execute_find_callers(StreamState *state, const ToolCall *tool);
-void execute_find_file_path(StreamState *state, const ToolCall *tool);
-void execute_get_dependencies(StreamState *state, const ToolCall *tool);
-void execute_get_file_chunk(StreamState *state, const ToolCall *tool);
-void execute_get_file_content(StreamState *state, const ToolCall *tool);
-void execute_get_function_code(StreamState *state, const ToolCall *tool);
-void execute_grep(StreamState *state, const ToolCall *tool);
-void execute_list_files(StreamState *state, const ToolCall *tool);
-void execute_replace_file_content(StreamState *state, const ToolCall *tool);
-void execute_replace_function(StreamState *state, const ToolCall *tool);
-void execute_save_to_file(StreamState *state, const ToolCall *tool);
-void execute_scan_function(StreamState *state, const ToolCall *tool);
-void execute_scan_symbol(StreamState *state, const ToolCall *tool);
-void execute_summarize_file(StreamState *state, const ToolCall *tool);
-
 // Tool calls
-ToolResponseParams *create_tool_response_params(const ToolCall *tool, char *content);
-void execute_tool(StreamState *state, const ToolCall *tool);
+ToolResponseParams *create_tool_response_params(const ToolCall *tool, ToolStatus status, char *content);
+ToolResponseParams *execute_tool(StreamState *state, const ToolCall *tool);
 void free_tool_call(ToolCall *tool);
 void free_tool_response_params(ToolResponseParams *params);
 void reset_state(StreamState *state);
 void print_stream_state(const StreamState *state, const char *label);
-void send_tool_response(StreamState *state, const ToolCall *tool, ToolStatus status, const char *content);
 
 // Event system
-void process_events(StreamState *state);
+ToolResponseParams *process_events(StreamState *state);
 
 // Socket
 int create_unix_socket_server();

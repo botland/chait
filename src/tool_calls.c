@@ -15,16 +15,6 @@ const char* get_status(ToolStatus status) {
     }
 }
 
-void send_tool_response(StreamState *state, const ToolCall *tool, ToolStatus status, const char *content) {
-    if (debug_level > 0) {
-        printf("[TOOL RESPONSE] %s: %s\n", get_status(status), content ? content : "");
-    }
-    if (tool) {
-        set_last_tool_response_params(tool, content, status);
-    }
-    // TODO: call build_tool_response if you want full history
-}
-
 void reset_state(StreamState *state) {
     if (state) {
 //        state->content[0] = '\0';
@@ -34,12 +24,14 @@ void reset_state(StreamState *state) {
     }
 }
 
-ToolResponseParams *create_tool_response_params(const ToolCall *tool, char *content) {
+ToolResponseParams *create_tool_response_params(const ToolCall *tool, ToolStatus status, char *content) {
     ToolResponseParams *p = malloc(sizeof(ToolResponseParams));
     if (p) {
         p->tool_call_id = strdup(tool->id);
         p->tool_name = strdup(tool->function_name);
+        p->tool_arguments = tool->function_arguments ? strdup(tool->function_arguments) : NULL;
         p->content = content ? strdup(content) : NULL;
+        p->status = status;
     }
     return p;
 }
@@ -48,28 +40,35 @@ void free_tool_response_params(ToolResponseParams *p) {
     if (p) {
         free(p->tool_call_id);
         free(p->tool_name);
-        free(p->content);
+        if (p->tool_arguments) free(p->tool_arguments);
+        if (p->content) free(p->content);
         free(p);
     }
 }
 
 // === Registry execute_tool ===
-void execute_tool(StreamState *state, const ToolCall *tool) {
+ToolResponseParams *execute_tool(StreamState *state, const ToolCall *tool) {
     if (!tool || !tool->function_name) {
-        send_tool_response(state, tool, TOOL_NOT_FOUND, "Invalid tool call");
-        return;
+        return create_tool_response_params(tool, TOOL_ERROR, "Invalid tool call");
     }
 
     if (debug_level > 0) {
         printf("[TOOL CALL] Executing: %s\n", tool->function_name);
     }
 
+    ToolResponseParams *trp = NULL;
     ToolHandler *handler = find_tool_handler(tool->function_name);
     if (handler && handler->execute) {
-        handler->execute(state, tool);
+        trp = handler->execute(state, tool);
     } else {
         char error_msg[512];
         snprintf(error_msg, sizeof(error_msg), "Unknown tool: %s", tool->function_name);
-        send_tool_response(state, tool, TOOL_ERROR, error_msg);
+        trp = create_tool_response_params(tool, TOOL_ERROR, error_msg);
     }
+
+    if (debug_level > 0) {
+        printf("[TOOL CALL] Execution status: %s\n", get_status(trp->status));
+    }
+
+    return trp;
 }

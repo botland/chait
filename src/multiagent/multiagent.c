@@ -153,8 +153,7 @@ void* agent_thread(void* arg) {
         AgentMessage msg = dequeue_message();
         // Real per-agent routing filter
         if (strcmp(msg.target, agent->name) == 0 || strlen(msg.target) == 0) {
-            printf("[multiagent %s] processing message from %s: %.100s\n", 
-                   agent->name, msg.sender, msg.content);
+            printf("[multiagent %s] processing message from %s: %.100s\n", agent->name, msg.sender, msg.content);
             // Real call to existing single-agent ReAct core
             run_multiloop_agent(&agent->ctx, msg.content, 8);
         }

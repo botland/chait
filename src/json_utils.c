@@ -426,7 +426,7 @@ void process_json_to_events(const char *json_str, StreamState *state) {
         cJSON *content = cJSON_GetObjectItemCaseSensitive(node, "content");
         if (cJSON_IsString(content) && content->valuestring && content->valuestring[0] != '\0') {
 
-            realloc_buffer(&state->content, content->valuestring, strlen(content->valuestring));
+//            realloc_buffer(&state->content, content->valuestring, strlen(content->valuestring));
             Event ev = {
                 .type = EVENT_TEXT,
                 .text = strdup(content->valuestring)
@@ -559,7 +559,7 @@ void process_json_to_events(const char *json_str, StreamState *state) {
     if (cJSON_IsString(finish_reason) && finish_reason->valuestring) {
 
         if (debug_level > 1) {
-            printf("[finish_reason] %s\n", finish_reason->valuestring);
+            printf("[FINISH REASON] %s\n", finish_reason->valuestring);
         }
 
         // -------------------------------------------------------------

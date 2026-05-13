@@ -43,10 +43,6 @@ size_t WriteCallbackNonStream(void *contents, size_t size, size_t nmemb, void *u
     return realsize;
 }
 
-// Static or per-state buffer for partial chunks (SSE can span multiple callbacks)
-//static char stream_buffer[65536] = {0};
-//static size_t stream_buf_len = 0;
-
 /*size_t WriteCallbackStream(void *contents, size_t size, size_t nmemb, void *userp) {
     size_t realsize = size * nmemb;
     StreamState *state = (StreamState *)userp;
@@ -202,10 +198,6 @@ size_t WriteCallbackStream(void *contents, size_t size, size_t nmemb, void *user
                     if (debug_level > 3) {
                         printf("[SSE DONE]\n");
                     }
-                    Event ev_done = {
-                        .type = EVENT_DONE
-                    };
-                    push_event(&state->queue, ev_done);
 
                 } else if (*json_str != '\0') {
                     if (debug_level > 4) {
@@ -235,9 +227,6 @@ size_t WriteCallbackStream(void *contents, size_t size, size_t nmemb, void *user
 
     state->stream_buf_len = remaining;
     state->stream_buffer[state->stream_buf_len] = '\0';
-
-    // Process queued events AFTER full parsing
-    process_events(state);
 
     return realsize;
 }
